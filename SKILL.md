@@ -46,6 +46,13 @@ Connection resolution (first non-empty wins):
    file's `default` field; `--config <path>` to point elsewhere)
 4. `npx -y mssql-axi setup config` writes an example config
 
+**Important constraint for the `home` view (no-args invocation):** the SDK
+strips leading flags, so `mssql-axi --connection-string '...'` is rejected
+before the home handler runs. For the no-args home view you must use option
+2 (env var) or option 3 (config file with a `default` in the cwd). For every
+other command (`doctor`, `list`, `inspect`, `sample`, `query`, etc.) the
+flag form works fine.
+
 ODBC 18 is strict: only `Encrypt=Yes|No|Strict` (not `True`/`False`). ODBC 17 accepts
 both. See [`docs/connection-strings.md`](docs/connection-strings.md) for the full
 cheat sheet including Azure AD modes.
@@ -135,6 +142,15 @@ bypass). Errors are structured `{ error, code, help[] }` on stdout, never on std
 - `execute` always reports `rowsAffected: [0]`. Verify with `query` after.
 - `npx` from `github:jeffreyhaen/mssql-axi` runs the `prepare` script on first
   install (downloads deps, runs `tsc`); allow a few extra seconds the first time.
+- `SELECT *` against tables with `varbinary`, `varbinary(max)`, or
+  `uniqueidentifier` columns fails with `[odbc] Error retrieving the result
+  set from the statement`. This is a known limitation of the
+  [`odbc`](https://www.npmjs.com/package/odbc) Node package — explicit
+  column lists work fine, and `query` succeeds once the offending columns
+  are listed explicitly. `sample` builds a `SELECT TOP n *` internally, so
+  on tables with these column types use `query` with an explicit column
+  list (or `query --sql "SELECT TOP 5 <cols-without-varbinary-or-uid> FROM dbo.X"`)
+  until the dynamic-column-list fix lands.
 
 ## Reference
 
