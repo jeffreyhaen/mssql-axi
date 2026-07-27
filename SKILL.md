@@ -142,15 +142,19 @@ bypass). Errors are structured `{ error, code, help[] }` on stdout, never on std
 - `execute` always reports `rowsAffected: [0]`. Verify with `query` after.
 - `npx` from `github:jeffreyhaen/mssql-axi` runs the `prepare` script on first
   install (downloads deps, runs `tsc`); allow a few extra seconds the first time.
-- `SELECT *` against tables with `varbinary`, `varbinary(max)`, or
-  `uniqueidentifier` columns fails with `[odbc] Error retrieving the result
-  set from the statement`. This is a known limitation of the
-  [`odbc`](https://www.npmjs.com/package/odbc) Node package — explicit
-  column lists work fine, and `query` succeeds once the offending columns
-  are listed explicitly. `sample` builds a `SELECT TOP n *` internally, so
-  on tables with these column types use `query` with an explicit column
-  list (or `query --sql "SELECT TOP 5 <cols-without-varbinary-or-uid> FROM dbo.X"`)
-  until the dynamic-column-list fix lands.
+- `SELECT *` against tables with `varbinary`, `varbinary(max)`,
+  `nvarchar(max)`, `varchar(max)`, or `uniqueidentifier` columns fails with
+  `[odbc] Error retrieving the result set from the statement`. This is a
+  known limitation of the [`odbc`](https://www.npmjs.com/package/odbc) Node
+  package — explicit column lists work fine, and `query` succeeds once the
+  offending columns are listed explicitly. `sample` automatically
+  rewrites the internal `SELECT *` to an explicit column list with the
+  problematic types CAST to a fixed bound (`uniqueidentifier` →
+  `VARCHAR(36)`, `varbinary(max)` → `VARBINARY(256)`, `nvarchar(max)` →
+  `NVARCHAR(4000)`, `varchar(max)` → `VARCHAR(8000)`), so it works
+  transparently on these tables. `query` does not rewrite user SQL, so
+  when using `query` against a `SELECT *` that hits this issue, list the
+  problematic columns explicitly with a CAST.
 
 ## Reference
 

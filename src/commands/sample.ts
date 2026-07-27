@@ -65,11 +65,19 @@ export async function sampleCommand(args: readonly string[]): Promise<Record<str
           `Run \`mssql-axi list --kind tables --schema ${schema}\` to see available objects`,
         ]);
       }
+      const quoted = `${sqlIdentifier(schema)}.${sqlIdentifier(name)}`;
+      const columnRows = await db.query<{ name: string; type: string; maxLength: number }>(
+        "SELECT c.name, t.name AS type, c.max_length AS maxLength " +
+          "FROM sys.columns c " +
+          "JOIN sys.types t ON c.user_type_id = t.user_type_id " +
+          `WHERE c.object_id = OBJECT_ID(${sqlString(quoted)}) ` +
+          "ORDER BY c.column_id",
+      );
+      const selectList = buildSampleSelectList(columnRows);
       const top = Math.max(1, Math.min(1_000_000, Math.floor(limit) + 1));
       const whereClause = where ? `WHERE (${where})` : "";
-      const quoted = `${sqlIdentifier(schema)}.${sqlIdentifier(name)}`;
       const result = await db.query<Record<string, unknown>>(
-        `SELECT TOP ${top} * FROM ${quoted} ${whereClause}`,
+        `SELECT TOP ${top} ${selectList} FROM ${quoted} ${whereClause}`,
       );
       const truncated = result.slice(0, limit);
       const hasMore = result.length > limit;
@@ -114,4 +122,51 @@ function clampLimit(value: string | boolean | undefined): number {
     ]);
   }
   return Math.min(MAX_LIMIT, Math.floor(n));
+}
+
+/**
+ * Builds a SELECT list for the sample query, casting column types that the
+ * `odbc` Node package cannot reliably retrieve as `SELECT *`. The problematic
+ * types are:
+ *
+ *   - `uniqueidentifier` — `SELECT *` against a column of this type yields
+ *     "Error retrieving the result set from the statement". CASTing to
+ *     VARCHAR(36) gives the standard 8-4-4-4-12 string representation.
+ *   - `varbinary` / `binary` — `SELECT *` against a column of this type
+ *     yields the same error. CASTing to VARBINARY(256) gives a fixed-length
+ *     binary value the driver handles cleanly. (The truncation is per-cell
+ *     only; the agent can use `--full` on `query` to see the untruncated
+ *     bytes via an explicit SELECT.)
+ *   - `nvarchar(max)` / `varchar(max)` (any `max_length = -1` LOB type) —
+ *     `SELECT *` against a table that includes a `MAX` column combined
+ *     with any other column also fails the same way. CASTing to a fixed
+ *     bound (NVARCHAR(4000) / VARCHAR(8000)) keeps the result-set
+ *     retrieval happy. The per-cell 200-char cap on stdout still
+ *     applies, so this is rarely a real loss.
+ *
+ * All other types pass through unchanged.
+ *
+ * Exported for unit testing.
+ */
+export function buildSampleSelectList(
+  columns: ReadonlyArray<{ name: string; type: string; maxLength: number }>,
+): string {
+  if (columns.length === 0) return "*";
+  const parts: string[] = [];
+  for (const c of columns) {
+    const quoted = sqlIdentifier(c.name);
+    const lower = c.type.toLowerCase();
+    if (lower === "uniqueidentifier") {
+      parts.push(`CAST(${quoted} AS VARCHAR(36)) AS ${quoted}`);
+    } else if (lower === "varbinary" || lower === "binary") {
+      parts.push(`CAST(${quoted} AS VARBINARY(256)) AS ${quoted}`);
+    } else if (c.maxLength === -1 && (lower === "nvarchar" || lower === "varchar" || lower === "char" || lower === "nchar")) {
+      // MAX types — cast to a fixed bound so the result-set is retrievable
+      const target = lower.startsWith("n") ? "NVARCHAR(4000)" : "VARCHAR(8000)";
+      parts.push(`CAST(${quoted} AS ${target}) AS ${quoted}`);
+    } else {
+      parts.push(quoted);
+    }
+  }
+  return parts.join(", ");
 }
