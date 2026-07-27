@@ -1,0 +1,57 @@
+{
+  "name": "mssql-axi",
+  "version": "0.1.0",
+  "description": "Agent-ergonomic CLI for Microsoft SQL Server and Azure SQL — read-by-default, token-efficient TOON output, an AXI (Agent eXperience Interface) backed by the native Microsoft ODBC driver.",
+  "keywords": [
+    "mssql",
+    "sqlserver",
+    "azure-sql",
+    "odbc",
+    "axi",
+    "agent",
+    "cli",
+    "toon",
+    "database"
+  ],
+  "license": "MIT",
+  "author": "Jeffrey Haen",
+  "homepage": "https://github.com/jeffreyhaen/mssql-axi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeffreyhaen/mssql-axi.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeffreyhaen/mssql-axi/issues"
+  },
+  "type": "module",
+  "bin": {
+    "mssql-axi": "dist/bin/mssql-axi.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/bin/mssql-axi.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "dependencies": {
+    "@toon-format/toon": "^2.3.0",
+    "axi-sdk-js": "^0.1.7",
+    "odbc": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.0"
+  }
+}

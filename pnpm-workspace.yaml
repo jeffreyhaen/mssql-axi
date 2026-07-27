@@ -1,0 +1,8 @@
+packages: []
+
+allowBuilds:
+  esbuild: true
+  odbc: true
+onlyBuiltDependencies:
+  - esbuild
+  - odbc

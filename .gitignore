@@ -1,0 +1,19 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.env
+.env.local
+*.tsbuildinfo
+
+# Never commit secrets or local connection info
+mssql-axi.config.json
+mssql-axi.config.local.json
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Local pi coding-agent state (unrelated to mssql-axi)
+.pi/
