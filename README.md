@@ -1,5 +1,9 @@
 # mssql-axi
 
+[![ci](https://github.com/jeffreyhaen/mssql-axi/actions/workflows/ci.yml/badge.svg)](https://github.com/jeffreyhaen/mssql-axi/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![node](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](package.json)
+
 Agent-ergonomic CLI for **Microsoft SQL Server** and **Azure SQL** — read-by-default,
 token-efficient [TOON](https://toonformat.dev/) output. An [AXI](https://axi.md/) (Agent
 eXperience Interface) backed by the native Microsoft ODBC driver.
@@ -168,3 +172,5 @@ CI runs on Node 20 and 22 via GitHub Actions (`.github/workflows/ci.yml`).
 ## License
 
 MIT © Jeffrey Haen
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
