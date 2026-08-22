@@ -39,6 +39,72 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   return { flags, positionals };
 }
 
+/**
+ * The SQL text for a command: `--sql "..."` or the first positional, so
+ * `mssql-axi query "SELECT 1"` works like `mssql-axi query --sql "SELECT 1"`.
+ */
+export function sqlArgument(args: ParsedArgs, positionalIndex = 0): string | undefined {
+  const fromFlag = args.flags.sql;
+  if (typeof fromFlag === "string" && fromFlag.trim() !== "") return fromFlag;
+  const fromPositional = args.positionals[positionalIndex];
+  if (typeof fromPositional === "string" && fromPositional.trim() !== "") return fromPositional;
+  return undefined;
+}
+
+/**
+ * Splits a possibly qualified object name into schema and name.
+ * Accepts `Users`, `dbo.Users`, `[dbo].[Users]`, and `[my.schema].[my.table]`.
+ */
+export function splitQualifiedName(raw: string): { schema?: string; name: string } {
+  const parts: string[] = [];
+  let current = "";
+  let inBrackets = false;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (ch === "[" && !inBrackets) {
+      inBrackets = true;
+      continue;
+    }
+    if (ch === "]" && inBrackets) {
+      if (raw[i + 1] === "]") {
+        current += "]";
+        i++;
+        continue;
+      }
+      inBrackets = false;
+      continue;
+    }
+    if (ch === "." && !inBrackets) {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  parts.push(current);
+  const nonEmpty = parts.filter((p) => p !== "");
+  if (nonEmpty.length >= 2) {
+    return { schema: nonEmpty[nonEmpty.length - 2], name: nonEmpty[nonEmpty.length - 1]! };
+  }
+  return { name: nonEmpty[0] ?? raw };
+}
+
+/**
+ * Resolves a table/view target from `--schema`/`--name` or a positional that may
+ * be qualified (`dbo.Users`). An explicit `--schema` always wins.
+ */
+export function objectTarget(
+  args: ParsedArgs,
+  positionalIndex = 0,
+): { schema?: string; name?: string } {
+  const schemaFlag = typeof args.flags.schema === "string" ? args.flags.schema : undefined;
+  const nameFlag = typeof args.flags.name === "string" ? args.flags.name : undefined;
+  const raw = nameFlag ?? args.positionals[positionalIndex];
+  if (raw === undefined) return { schema: schemaFlag, name: undefined };
+  const split = splitQualifiedName(raw);
+  return { schema: schemaFlag ?? split.schema, name: split.name };
+}
+
 export function flagString(args: ParsedArgs, name: string): string | undefined {
   const v = args.flags[name];
   return typeof v === "string" ? v : undefined;

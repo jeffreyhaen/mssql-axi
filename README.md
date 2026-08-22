@@ -1,173 +1,166 @@
-# mssql-axi
+# mssql-axi (SQL Server axi)
 
 [![ci](https://github.com/jeffreyhaen/mssql-axi/actions/workflows/ci.yml/badge.svg)](https://github.com/jeffreyhaen/mssql-axi/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![node](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](package.json)
 
-Agent-ergonomic CLI for **Microsoft SQL Server** and **Azure SQL** — read-by-default,
-token-efficient [TOON](https://toonformat.dev/) output. An [AXI](https://axi.md/) (Agent
-eXperience Interface) backed by the native Microsoft ODBC driver.
+Agent-ergonomic CLI for **Microsoft SQL Server** and **Azure SQL** — schema discovery,
+row previews, read-only queries, showplans, and gated mutations, in token-efficient
+[TOON](https://toonformat.dev/) output.
 
-> Inspired by [`sqlite-axi`](https://github.com/SSBrouhard/sqlite-axi) and
-> [`pg-axi`](https://github.com/thatdudealso/pg-axi). Read-by-default, mutating operations
-> are dry-run, secrets never touch disk.
+`mssql-axi` is a SQL Server [AXI](https://github.com/kunchenguid/axi) (Agent eXperience
+Interface): a CLI designed for autonomous agents rather than humans. It talks to the
+server through the native Microsoft ODBC driver, passes connection strings through
+verbatim, is read-by-default, and answers with minimal schemas plus contextual next-step
+hints.
 
-## Why
+## Why not an MCP server
 
-MCP servers overload the agent's schema window (~185K input tokens/task). Raw `sqlcmd`
-works but is free-form and offers no read-only enforcement. `mssql-axi` is a small,
-predictable CLI with **TOON output, read-only by construction, combined operations**, and
-**contextual `help[]` after every command** — designed for agents, validated by the AXI
-principles.
-
-## Driver
-
-`mssql-axi` is built on the [`odbc`](https://www.npmjs.com/package/odbc) Node package,
-which wraps the native Microsoft ODBC Driver 17/18 on Windows (and `unixodbc` on
-Linux/macOS). The `mssql` Node package was dropped because it cannot speak Shared Memory
-to a local SQL Server, cannot use the current Windows identity, and the ODBC driver
-covers every scenario it does.
-
-What you get with ODBC:
-- **Local SQL Server** via Shared Memory + Windows Auth (`Trusted_Connection=Yes`)
-- **Azure SQL** via `Authentication=ActiveDirectoryInteractive|Integrated|Default|
-  ServicePrincipal|Password|ManagedIdentity|DeviceCodeFlow`
-- **Named instances** (e.g. `Server=HOSTNAME\INSTANCENAME`) without manual port lookup
-- **Connection strings pass through verbatim** — paste the same string you use in
-  `sqlcmd`, SSMS, or .NET; no translation, no flag dance.
+A database MCP server loads its full tool schema into the agent's context on every
+request for the rest of the session (~185k input tokens per task in our measurements).
+A skill-based AXI costs ~55 tokens until the agent actually uses it. Raw `sqlcmd` is
+cheaper still, but is free-form, returns wide ASCII tables, and offers no read-only
+enforcement.
 
 ## Install
 
-```bash
-# Install path: npx from the GitHub repo (the `prepare` script builds dist/ on first install)
-npx github:jeffreyhaen/mssql-axi <command>
+No npm publish — run it straight from GitHub:
 
-# Or, for a single command without keeping the install:
-npx -y github:jeffreyhaen/mssql-axi doctor --connection-string '...'
-
-# From a local clone:
-git clone https://github.com/jeffreyhaen/mssql-axi.git
-cd mssql-axi
-pnpm install   # runs `prepare` → `tsc -p tsconfig.json`
-node dist/bin/mssql-axi.js <command>
+```sh
+npx -y github:jeffreyhaen/mssql-axi --help
 ```
 
-## Quick start (5 minutes)
+Or install globally:
 
-1. **Pick a connection string** — local SQL Server with Windows Auth:
-
-   ```text
-   Driver={ODBC Driver 17 for SQL Server};Server=localhost\SQLEXPRESS;Database=app;Trusted_Connection=Yes;Trust Server Certificate=Yes;
-   ```
-
-   Or Azure SQL with interactive AAD sign-in (opens browser once):
-
-   ```text
-   Driver={ODBC Driver 18 for SQL Server};Server=tcp:myapp.database.windows.net,1433;Initial Catalog=app;Authentication=ActiveDirectoryInteractive;Encrypt=Yes;
-   ```
-
-   See [`docs/connection-strings.md`](docs/connection-strings.md) for the keyword
-   differences between ODBC 17 vs 18, and between .NET `Authentication=Active Directory
-   Default` (a chain) and the explicit ODBC `Authentication=ActiveDirectory...` values.
-
-2. **Verify connectivity**:
-
-   ```bash
-   mssql-axi doctor --connection-string 'Driver={ODBC Driver 17 for SQL Server};Server=HOSTNAME\INSTANCENAME;Database=YOUR_DB;Trusted_Connection=Yes;Trust Server Certificate=Yes;'
-   ```
-
-3. **Inspect and query** (flags must come **after** the subcommand):
-
-   ```bash
-   mssql-axi list --kind tables --connection-string '...'
-   mssql-axi inspect --kind table --schema dbo --name Users --connection-string '...'
-   mssql-axi sample --schema dbo --name Users --limit 5 --connection-string '...'
-   mssql-axi query --sql "SELECT TOP 10 id, email FROM dbo.Users" --connection-string '...'
-   ```
-
-4. **(Optional) Install SessionStart hooks** so the agent starts each session with the
-   active connection's home view:
-
-   ```bash
-   mssql-axi setup hooks
-   ```
-
-5. **(Optional) Save the string in a config file** so you don't have to repeat it:
-
-   ```bash
-   mssql-axi setup config > mssql-axi.config.json
-   # edit the file, replacing the example server/database/auth values
-   mssql-axi --connection dev list --kind tables
-   ```
-
-## Usage
-
-```text
-mssql-axi                       # home view: server, DB, top tables
-mssql-axi doctor                # connectivity + read-only role check
-mssql-axi list --kind <kind>    # tables | views | indexes | schemas
-mssql-axi inspect --kind <kind> --schema <s> --name <n>
-mssql-axi sample  --schema <s> --name <n> [--where "..."] [--limit N]
-mssql-axi query  --sql "..."    [--limit N] [--full]
-mssql-axi plan   --sql "..."    # show the T-SQL without executing
-mssql-axi execute --sql "..."   # mutating; requires --confirm <sql> and --execute
-mssql-axi explain --sql "..."   # SET SHOWPLAN_XML ON
-mssql-axi setup role            # prints T-SQL to create agent_reader
-mssql-axi setup hooks           # installs SessionStart hooks
-mssql-axi setup config          # writes example mssql-axi.config.json
-mssql-axi update                # self-update
-mssql-axi update --check        # check for newer version
+```sh
+npm install -g github:jeffreyhaen/mssql-axi
+mssql-axi --help
 ```
 
-### Connection resolution
+The `prepare` script builds `dist/` on install, so no build step is needed.
 
-In order of precedence (first non-empty wins):
+**Prerequisite:** the Microsoft ODBC Driver 17 or 18 for SQL Server on the host
+(Windows: the MSI from Microsoft; Linux/macOS: `unixodbc` + the Microsoft driver).
 
-1. **`--connection-string "<ODBC string>"`** flag — the value is passed to ODBC verbatim.
-2. **`MSSQL_CONNECTION_STRING`** environment variable — same shape.
-3. **`mssql-axi.config.json`** in the working directory or `--config <path>`. Each
-   `connections.<name>` entry is a full ODBC connection string. `--connection <name>`
-   picks a non-default entry.
+## Agent integration
 
-Config file shape:
+Install the skill so an agent loads the usage guide on demand:
+
+```sh
+npx skills add jeffreyhaen/mssql-axi --skill mssql-axi -g
+```
+
+Omit `-g` to install the skill for the current project only. To have the agent start
+each session with the active connection's home view:
+
+```sh
+mssql-axi setup hooks
+```
+
+## Configure
+
+A connection is resolved in this order (first non-empty wins):
+
+1. `--connection-string "<ODBC string>"` — passed to ODBC verbatim
+2. `MSSQL_CONNECTION_STRING` — same shape
+3. `mssql-axi.config.json` in the working directory (or `--config <path>`), with
+   `--connection <name>` to pick a non-default entry
+
+```sh
+mssql-axi setup config > mssql-axi.config.json   # writes an example to edit
+mssql-axi doctor --connection dev
+```
 
 ```json
 {
   "default": "dev",
   "connections": {
-    "dev":   "Driver={ODBC Driver 17 for SQL Server};Server=localhost;Database=app;Trusted_Connection=Yes;",
+    "dev": "Driver={ODBC Driver 17 for SQL Server};Server=localhost\\SQLEXPRESS;Database=app;Trusted_Connection=Yes;Trust Server Certificate=Yes;",
     "azure": "Driver={ODBC Driver 18 for SQL Server};Server=tcp:myapp.database.windows.net,1433;Initial Catalog=app;Authentication=ActiveDirectoryInteractive;Encrypt=Yes;"
   }
 }
 ```
 
-Secrets live in the connection string itself, in env vars interpolated by your shell
-(e.g. `"...Password=${MSSQL_AGENT_PWD};..."`), or in a secret manager that writes
-`MSSQL_CONNECTION_STRING` to the environment before launching `mssql-axi`. The redactor
-scrubs `Password=...`, `Pwd=...`, `UID=...` from any error message that bubbles up.
+- **Local SQL Server** works over Shared Memory with Windows Auth
+  (`Trusted_Connection=Yes`), including named instances (`Server=HOST\INSTANCE`).
+- **Azure SQL** works with `Authentication=ActiveDirectoryInteractive|Integrated|
+  Default|ServicePrincipal|Password|ManagedIdentity|DeviceCodeFlow`.
+- Secrets live in the connection string, in a shell-interpolated env var
+  (`"...Password=${MSSQL_AGENT_PWD};..."`), or in a secret manager that exports
+  `MSSQL_CONNECTION_STRING`. `Password=`, `Pwd=`, and `UID=` are redacted from every
+  error message.
+- See [`docs/connection-strings.md`](docs/connection-strings.md) for the ODBC 17 vs 18
+  keyword differences and one line per supported auth flow.
 
-## Read-only guarantee (two layers)
+The `mssql` Node package was dropped in favour of [`odbc`](https://www.npmjs.com/package/odbc):
+it cannot speak Shared Memory to a local SQL Server, cannot use the current Windows
+identity, and ODBC covers every scenario it does.
+
+## Use
+
+```sh
+mssql-axi                                    # home: server, database, largest tables
+mssql-axi doctor                             # connectivity + read-only role check
+mssql-axi list tables                        # tables | views | indexes | schemas
+mssql-axi list views --schema sales --limit 50
+mssql-axi inspect dbo.Users                  # columns, primary key, foreign keys
+mssql-axi inspect view dbo.vActiveUsers
+mssql-axi sample dbo.Users --limit 5
+mssql-axi sample dbo.Users --where "createdAt > '2026-01-01'" --full
+mssql-axi query "SELECT TOP 10 id, email FROM dbo.Users"
+mssql-axi explain "SELECT * FROM dbo.Users WHERE email = 'a@b.c'"
+mssql-axi plan "ALTER TABLE dbo.Users ADD nickname NVARCHAR(50) NULL"
+mssql-axi execute "UPDATE dbo.Users SET active = 0 WHERE id = 42" \
+  --confirm "UPDATE dbo.Users SET active = 0 WHERE id = 42" --execute
+mssql-axi setup role                         # T-SQL to create the agent_reader role
+mssql-axi update --check                     # check for a newer version
+```
+
+Every command supports `--help`. SQL and object names may be passed positionally
+(`query "SELECT 1"`, `inspect dbo.Users`) or through flags (`--sql`, `--schema`/`--name`);
+`[bracketed].[names]` are accepted and the schema defaults to `dbo`. Lists support
+`--limit`; row output truncates long cells at 200 characters unless `--full` is given.
+
+### Read-only guarantee (two layers)
 
 1. **Database-side** — a dedicated `agent_reader` role with `db_datareader` and
-   `db_denydatawriter`. Set up once with `mssql-axi setup role`.
-2. **Application-side** — a SQL validator on every `query` call. Only `SELECT` (with
-   optional `WITH cte AS (...) SELECT ...`), `EXPLAIN`, and `SET SHOWPLAN_XML ON` are
+   `db_denydatawriter`. Set up once with `mssql-axi setup role`; `mssql-axi doctor`
+   reports whether the current login is a member.
+2. **Application-side** — a validator on every read command. Only `SELECT` (optionally
+   with a leading `WITH cte AS (...)`), `EXPLAIN`, and `SET SHOWPLAN_XML ON` are
    accepted. `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `DROP`, `TRUNCATE`, `EXEC`, stacked
-   statements, and `;GO` are refused with a structured error.
+   statements, and `;GO` are refused with a structured error before any connection is
+   opened.
 
-Mutating operations go through `execute`, which is **dry-run by default** and requires
-both `--confirm <exact sql>` and `--execute`.
+### Safe mutations
+
+`execute` is **dry-run by default** and prints the normalised T-SQL. Committing requires
+`--confirm "<the same statement>"` (compared after comments are stripped and whitespace
+is normalised) **and** `--execute`. Destructive shapes — `DROP`, `TRUNCATE`, and
+`DELETE`/`UPDATE` without a `WHERE` — additionally require `--allow-destructive`.
+`--max-rows-affected` (default 10,000) refuses to report success for a runaway
+statement, and `--timeout` (default 30s) bounds the run.
+
+## Design
+
+Built against the ten AXI principles: TOON output, minimal default schemas, truncation
+with `--full`, pre-computed aggregates (row counts, totals), definitive empty states,
+structured errors on stdout with exit code 2 for usage errors, a content-first
+no-argument home view, contextual next-step hints, and concise per-command help.
 
 ## Development
 
-```bash
+```sh
 pnpm install
+pnpm run typecheck
 pnpm run build
-pnpm run dev -- list --kind tables --connection-string '...'
 pnpm test
+pnpm run dev -- list tables --connection-string '...'
 ```
 
-CI runs on Node 20 and 22 via GitHub Actions (`.github/workflows/ci.yml`).
+Tests run the command layer against an injected fake ODBC driver (`test/fakeDb.ts`), so
+no live SQL Server is needed. CI runs build, typecheck, tests, and a CLI smoke test on
+Node 20 and 22 (Linux) and Node 20 (Windows).
 
 ## License
 

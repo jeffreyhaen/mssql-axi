@@ -18,7 +18,8 @@ Connection strings are passed through verbatim — paste the same string you use
    stacked statements, and `;GO` from any read command.
 2. **Mutations are double-gated.** `execute` is **dry-run by default**. To actually
    run, pass **both** `--confirm "<exact sql>"` **and** `--execute`. The `--confirm`
-   value must match `--sql` byte-for-byte.
+   value must match the statement after comments are stripped and whitespace is
+   normalised.
 3. **Destructive patterns need a third flag.** `DROP` / `TRUNCATE` / `DELETE` without
    `WHERE` / `UPDATE` without `WHERE` also require `--allow-destructive`.
 4. **Recommend a read-only role for routine work.** The connection should use a
@@ -63,22 +64,37 @@ cheat sheet including Azure AD modes.
 | --- | --- | --- |
 | `home` (no args) | server, DB, version, top tables by row count | `npx -y mssql-axi` |
 | `doctor` | connectivity + read-only role check | `npx -y mssql-axi doctor` |
-| `list` | tables, views, indexes, or schemas | `npx -y mssql-axi list --kind tables` |
-| `inspect` | columns, keys, definition of one object | `npx -y mssql-axi inspect --kind table --schema dbo --name Users` |
-| `sample` | preview rows (per-cell 200-char truncation, override with `--full`) | `npx -y mssql-axi sample --schema dbo --name Users --limit 5` |
-| `query` | capped read (validator refuses writes) | `npx -y mssql-axi query --sql "SELECT TOP 10 id, email FROM dbo.Users"` |
-| `plan` | show T-SQL without executing | `npx -y mssql-axi plan --sql "INSERT ..."` |
-| `explain` | `SET SHOWPLAN_XML ON` | `npx -y mssql-axi explain --sql "SELECT ..."` |
+| `list` | tables, views, indexes, or schemas | `npx -y mssql-axi list tables` |
+| `inspect` | columns, keys, definition of one object | `npx -y mssql-axi inspect dbo.Users` |
+| `sample` | preview rows (per-cell 200-char truncation, override with `--full`) | `npx -y mssql-axi sample dbo.Users --limit 5` |
+| `query` | capped read (validator refuses writes) | `npx -y mssql-axi query "SELECT TOP 10 id, email FROM dbo.Users"` |
+| `plan` | show T-SQL without executing | `npx -y mssql-axi plan "INSERT ..."` |
+| `explain` | `SET SHOWPLAN_XML ON` | `npx -y mssql-axi explain "SELECT ..."` |
+
+### Positional shorthand
+
+SQL and object names may be passed positionally — shorter and cheaper than the flag form:
+
+| Long form | Shorthand |
+| --- | --- |
+| `list --kind tables` | `list tables` |
+| `inspect --kind table --schema dbo --name Users` | `inspect dbo.Users` |
+| `inspect --kind view --schema dbo --name vUsers` | `inspect view dbo.vUsers` |
+| `sample --schema dbo --name Users` | `sample dbo.Users` |
+| `query --sql "SELECT 1"` | `query "SELECT 1"` |
+
+`[bracketed].[names]` are accepted; an explicit `--schema` overrides the qualifier. The
+schema defaults to `dbo`.
 
 ## Mutating command
 
 ```bash
 # Dry run (default — no rows change)
-npx -y mssql-axi execute --sql "UPDATE dbo.Users SET active = 0 WHERE id = 42"
+npx -y mssql-axi execute "UPDATE dbo.Users SET active = 0 WHERE id = 42"
 
-# Actually run — both flags required, --confirm must match --sql byte-for-byte
-npx -y mssql-axi execute \
-  --sql "UPDATE dbo.Users SET active = 0 WHERE id = 42" \
+# Actually run — both flags required, --confirm must match the SQL after
+# comments are stripped and whitespace is normalised
+npx -y mssql-axi execute "UPDATE dbo.Users SET active = 0 WHERE id = 42" \
   --confirm "UPDATE dbo.Users SET active = 0 WHERE id = 42" \
   --execute
 
@@ -90,8 +106,8 @@ npx -y mssql-axi execute \
 a row count. Verify with `query` after the mutation:
 
 ```bash
-npx -y mssql-axi query --sql "SELECT @@ROWCOUNT AS affected"
-npx -y mssql-axi query --sql "SELECT * FROM dbo.Users WHERE id = 42"
+npx -y mssql-axi query "SELECT @@ROWCOUNT AS affected"
+npx -y mssql-axi query "SELECT * FROM dbo.Users WHERE id = 42"
 ```
 
 ## Common workflows
@@ -99,32 +115,31 @@ npx -y mssql-axi query --sql "SELECT * FROM dbo.Users WHERE id = 42"
 **Discover → inspect → query** (the standard read sequence)
 
 ```bash
-npx -y mssql-axi list --kind tables                                  # what's there?
-npx -y mssql-axi inspect --kind table --schema dbo --name Users      # columns, keys, indexes
-npx -y mssql-axi sample --schema dbo --name Users --limit 5          # what do rows look like?
-npx -y mssql-axi query --sql "SELECT TOP 10 ..."                     # run the analysis
+npx -y mssql-axi list tables                     # what's there?
+npx -y mssql-axi inspect dbo.Users               # columns, keys, indexes
+npx -y mssql-axi sample dbo.Users --limit 5      # what do rows look like?
+npx -y mssql-axi query "SELECT TOP 10 ..."       # run the analysis
 ```
 
 **Investigate a slow query**
 
 ```bash
-npx -y mssql-axi explain --sql "SELECT ..."                          # see the showplan + estimated cost
-npx -y mssql-axi inspect --kind indexes --schema dbo --name Users    # which indexes exist?
-npx -y mssql-axi query --sql "SET STATISTICS IO ON; SELECT ..."      # logical reads per statement
+npx -y mssql-axi explain "SELECT ..."                # see the showplan + estimated cost
+npx -y mssql-axi list indexes --schema dbo           # which indexes exist?
+npx -y mssql-axi query "SET STATISTICS IO ON; SELECT ..."  # logical reads per statement
 ```
 
 **Plan and apply a schema change**
 
 ```bash
 # 1. Preview the T-SQL
-npx -y mssql-axi plan --sql "ALTER TABLE dbo.Users ADD email_confirmed_at DATETIME2 NULL"
+npx -y mssql-axi plan "ALTER TABLE dbo.Users ADD email_confirmed_at DATETIME2 NULL"
 
 # 2. Dry-run the execute (default)
-npx -y mssql-axi execute --sql "ALTER TABLE dbo.Users ADD email_confirmed_at DATETIME2 NULL"
+npx -y mssql-axi execute "ALTER TABLE dbo.Users ADD email_confirmed_at DATETIME2 NULL"
 
 # 3. Apply it (gated)
-npx -y mssql-axi execute \
-  --sql "ALTER TABLE dbo.Users ADD email_confirmed_at DATETIME2 NULL" \
+npx -y mssql-axi execute "ALTER TABLE dbo.Users ADD email_confirmed_at DATETIME2 NULL" \
   --confirm "ALTER TABLE dbo.Users ADD email_confirmed_at DATETIME2 NULL" \
   --execute
 ```

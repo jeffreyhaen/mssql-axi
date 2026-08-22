@@ -1,5 +1,5 @@
 import { AxiError } from "axi-sdk-js";
-import { parseArgs } from "../lib/args.js";
+import { parseArgs, sqlArgument } from "../lib/args.js";
 import { resolveConnection } from "../lib/config.js";
 import { withDatabase } from "../lib/connect.js";
 import { redactSecrets } from "../lib/redact.js";
@@ -23,10 +23,11 @@ export async function explainCommand(args: readonly string[]): Promise<Record<st
     }
   }
 
-  const sqlText = typeof parsed.flags.sql === "string" ? parsed.flags.sql : undefined;
+  const sqlText = sqlArgument(parsed);
   if (!sqlText) {
-    throw new AxiError("--sql is required for explain", "VALIDATION_ERROR", [
-      "Pass --sql \"SELECT ...\"",
+    throw new AxiError("a SELECT statement is required for explain", "VALIDATION_ERROR", [
+      "Pass it positionally: `mssql-axi explain \"SELECT ...\"`",
+      "Or with the flag: `mssql-axi explain --sql \"SELECT ...\"`",
     ]);
   }
   const full = parsed.flags.full === true;

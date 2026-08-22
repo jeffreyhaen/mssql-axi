@@ -1,5 +1,5 @@
 import { AxiError } from "axi-sdk-js";
-import { parseArgs } from "../lib/args.js";
+import { parseArgs, sqlArgument } from "../lib/args.js";
 import { resolveConnection } from "../lib/config.js";
 import { withDatabase } from "../lib/connect.js";
 import { redactSecrets } from "../lib/redact.js";
@@ -31,10 +31,11 @@ export async function executeCommand(args: readonly string[]): Promise<Record<st
     }
   }
 
-  const sqlText = typeof parsed.flags.sql === "string" ? parsed.flags.sql : undefined;
+  const sqlText = sqlArgument(parsed);
   if (!sqlText) {
-    throw new AxiError("--sql is required for execute", "VALIDATION_ERROR", [
-      "Pass --sql \"INSERT ...\"",
+    throw new AxiError("a SQL statement is required for execute", "VALIDATION_ERROR", [
+      "Pass it positionally: `mssql-axi execute \"UPDATE ...\" --confirm \"UPDATE ...\"`",
+      "Or with the flag: `mssql-axi execute --sql \"UPDATE ...\"`",
     ]);
   }
   const confirm = typeof parsed.flags.confirm === "string" ? parsed.flags.confirm : undefined;

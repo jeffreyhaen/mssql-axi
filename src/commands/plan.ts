@@ -1,5 +1,5 @@
 import { AxiError } from "axi-sdk-js";
-import { parseArgs } from "../lib/args.js";
+import { parseArgs, sqlArgument } from "../lib/args.js";
 import { isDestructive, normaliseSql } from "../lib/normalize.js";
 
 const KNOWN_FLAGS = [
@@ -26,10 +26,11 @@ export async function planCommand(args: readonly string[]): Promise<Record<strin
     }
   }
 
-  const sqlText = typeof parsed.flags.sql === "string" ? parsed.flags.sql : undefined;
+  const sqlText = sqlArgument(parsed);
   if (!sqlText) {
-    throw new AxiError("--sql is required for plan", "VALIDATION_ERROR", [
-      "Pass --sql \"INSERT ...\"",
+    throw new AxiError("a SQL statement is required for plan", "VALIDATION_ERROR", [
+      "Pass it positionally: `mssql-axi plan \"INSERT ...\"`",
+      "Or with the flag: `mssql-axi plan --sql \"INSERT ...\"`",
     ]);
   }
   const allowDestructive = parsed.flags["allow-destructive"] === true;

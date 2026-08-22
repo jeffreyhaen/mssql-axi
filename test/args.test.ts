@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { assertKnownFlags, flagBool, flagNumber, flagString, parseArgs } from "../src/lib/args.js";
+import {
+  assertKnownFlags,
+  flagBool,
+  flagNumber,
+  flagString,
+  objectTarget,
+  parseArgs,
+  splitQualifiedName,
+  sqlArgument,
+} from "../src/lib/args.js";
 
 describe("parseArgs", () => {
   it("returns empty args for an empty array", () => {
@@ -86,5 +95,78 @@ describe("assertKnownFlags", () => {
   it("throws with a useful message when an unknown flag is present", () => {
     const a = parseArgs(["--server", "x", "--foobar", "1"]);
     expect(() => assertKnownFlags(a, ["server"], "list")).toThrow(/unknown flag --foobar/);
+  });
+});
+
+describe("sqlArgument", () => {
+  it("prefers --sql", () => {
+    expect(sqlArgument(parseArgs(["--sql", "SELECT 1", "SELECT 2"]))).toBe("SELECT 1");
+  });
+
+  it("falls back to the first positional", () => {
+    expect(sqlArgument(parseArgs(["SELECT 2"]))).toBe("SELECT 2");
+  });
+
+  it("ignores blank values", () => {
+    expect(sqlArgument(parseArgs(["--sql", "   "]))).toBeUndefined();
+    expect(sqlArgument(parseArgs([]))).toBeUndefined();
+  });
+});
+
+describe("splitQualifiedName", () => {
+  it("returns a bare name unqualified", () => {
+    expect(splitQualifiedName("Users")).toEqual({ name: "Users" });
+  });
+
+  it("splits schema.name", () => {
+    expect(splitQualifiedName("dbo.Users")).toEqual({ schema: "dbo", name: "Users" });
+  });
+
+  it("unwraps brackets", () => {
+    expect(splitQualifiedName("[dbo].[Order Lines]")).toEqual({
+      schema: "dbo",
+      name: "Order Lines",
+    });
+  });
+
+  it("keeps dots inside brackets", () => {
+    expect(splitQualifiedName("[my.schema].[my.table]")).toEqual({
+      schema: "my.schema",
+      name: "my.table",
+    });
+  });
+
+  it("uses the last two parts of db.schema.name", () => {
+    expect(splitQualifiedName("app.dbo.Users")).toEqual({ schema: "dbo", name: "Users" });
+  });
+});
+
+describe("objectTarget", () => {
+  it("reads --schema and --name", () => {
+    expect(objectTarget(parseArgs(["--schema", "sales", "--name", "Orders"]))).toEqual({
+      schema: "sales",
+      name: "Orders",
+    });
+  });
+
+  it("splits a qualified positional", () => {
+    expect(objectTarget(parseArgs(["sales.Orders"]))).toEqual({
+      schema: "sales",
+      name: "Orders",
+    });
+  });
+
+  it("lets an explicit --schema win over the qualified name", () => {
+    expect(objectTarget(parseArgs(["dbo.Orders", "--schema", "sales"]))).toEqual({
+      schema: "sales",
+      name: "Orders",
+    });
+  });
+
+  it("returns no name when nothing was given", () => {
+    expect(objectTarget(parseArgs(["--schema", "dbo"]))).toEqual({
+      schema: "dbo",
+      name: undefined,
+    });
   });
 });

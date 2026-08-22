@@ -1,5 +1,5 @@
 import { AxiError } from "axi-sdk-js";
-import { parseArgs } from "../lib/args.js";
+import { objectTarget, parseArgs } from "../lib/args.js";
 import { resolveConnection } from "../lib/config.js";
 import { withDatabase } from "../lib/connect.js";
 import { redactSecrets } from "../lib/redact.js";
@@ -29,12 +29,13 @@ export async function sampleCommand(args: readonly string[]): Promise<Record<str
     }
   }
 
-  const schema = typeof parsed.flags.schema === "string" ? parsed.flags.schema : "dbo";
-  const name =
-    typeof parsed.flags.name === "string" ? parsed.flags.name : parsed.positionals[0];
+  const target = objectTarget(parsed, 0);
+  const schema = target.schema ?? "dbo";
+  const name = target.name;
   if (!name) {
-    throw new AxiError("--name is required for sample", "VALIDATION_ERROR", [
-      "Pass --name <table-or-view-name>",
+    throw new AxiError("a table or view name is required for sample", "VALIDATION_ERROR", [
+      "Pass it positionally: `mssql-axi sample dbo.Users`",
+      "Or with flags: `--schema dbo --name Users`",
     ]);
   }
   const where = typeof parsed.flags.where === "string" ? parsed.flags.where : undefined;

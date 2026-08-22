@@ -1,5 +1,5 @@
 import { AxiError } from "axi-sdk-js";
-import { parseArgs } from "../lib/args.js";
+import { objectTarget, parseArgs } from "../lib/args.js";
 import { resolveConnection } from "../lib/config.js";
 import { withDatabase } from "../lib/connect.js";
 import { redactSecrets } from "../lib/redact.js";
@@ -27,15 +27,14 @@ export async function inspectCommand(args: readonly string[]): Promise<Record<st
     }
   }
 
-  const kind = pickKind(parsed);
-  const schema = typeof parsed.flags.schema === "string" ? parsed.flags.schema : undefined;
-  const name =
-    typeof parsed.flags.name === "string"
-      ? parsed.flags.name
-      : parsed.positionals[0];
+  const { kind, positionals } = pickKind(parsed);
+  const target = objectTarget({ flags: parsed.flags, positionals }, 0);
+  const schema = target.schema;
+  const name = target.name;
   if (!name) {
-    throw new AxiError(`--name is required for inspect ${kind}`, "VALIDATION_ERROR", [
-      "Pass --name <object-name>",
+    throw new AxiError(`an object name is required for inspect ${kind}`, "VALIDATION_ERROR", [
+      `Pass it positionally: \`mssql-axi inspect ${kind} dbo.Users\``,
+      "Or with flags: `--schema dbo --name Users`",
     ]);
   }
 
@@ -70,16 +69,39 @@ export async function inspectCommand(args: readonly string[]): Promise<Record<st
   }
 }
 
-function pickKind(parsed: { positionals: string[]; flags: Record<string, string | boolean> }): Kind {
+/**
+ * Resolves the kind from `--kind` or a leading positional (`inspect table dbo.Users`)
+ * and returns the positionals left over for the object name.
+ */
+function pickKind(parsed: {
+  positionals: string[];
+  flags: Record<string, string | boolean>;
+}): { kind: Kind; positionals: string[] } {
   const fromFlag = typeof parsed.flags.kind === "string" ? parsed.flags.kind : undefined;
-  const fromPos = parsed.positionals[0];
-  const raw = (fromFlag ?? fromPos ?? "table").toLowerCase();
-  if ((KINDS as readonly string[]).includes(raw)) return raw as Kind;
-  throw new AxiError(
-    `unknown --kind '${raw}'`,
-    "VALIDATION_ERROR",
-    [`Kinds: ${KINDS.join(", ")}`],
-  );
+  if (fromFlag !== undefined) {
+    return { kind: assertKind(fromFlag), positionals: [...parsed.positionals] };
+  }
+  const rest = [...parsed.positionals];
+  const first = rest[0]?.toLowerCase();
+  if (first !== undefined && (KINDS as readonly string[]).includes(first)) {
+    rest.shift();
+    return { kind: first as Kind, positionals: rest };
+  }
+  // A bare `inspect dbo.Users` defaults to a table.
+  if (first !== undefined && !first.includes(".") && rest.length > 1) {
+    throw new AxiError(`unknown kind '${rest[0]}'`, "VALIDATION_ERROR", [
+      `Kinds: ${KINDS.join(", ")}`,
+    ]);
+  }
+  return { kind: "table", positionals: rest };
+}
+
+function assertKind(raw: string): Kind {
+  const value = raw.toLowerCase();
+  if ((KINDS as readonly string[]).includes(value)) return value as Kind;
+  throw new AxiError(`unknown --kind '${raw}'`, "VALIDATION_ERROR", [
+    `Kinds: ${KINDS.join(", ")}`,
+  ]);
 }
 
 async function inspectTable(

@@ -9,16 +9,27 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
-    name: Build + Test (Node ${{ matrix.node }})
-    runs-on: ubuntu-latest
+    name: Build + Test (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        node: ["20", "22"]
+        include:
+          - os: ubuntu-latest
+            node: "20"
+          - os: ubuntu-latest
+            node: "22"
+          - os: windows-latest
+            node: "20"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -26,13 +37,16 @@ jobs:
           version: 9
 
       - name: Use Node.js ${{ matrix.node }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
 
       - name: Install
         run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
 
       - name: Build
         run: pnpm run build
@@ -41,6 +55,7 @@ jobs:
         run: pnpm test
 
       - name: Smoke test
+        shell: bash
         run: |
           node dist/bin/mssql-axi.js --version
           node dist/bin/mssql-axi.js --help > /dev/null

@@ -3,6 +3,35 @@
 All notable changes to mssql-axi are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Positional arguments: `query "SELECT ..."`, `explain "SELECT ..."`, `plan "..."`, and
+  `execute "..."` now accept the statement without `--sql`; `inspect [kind] <dbo.Table>`
+  and `sample <dbo.Table>` accept a qualified object name (including `[bracketed].[names]`).
+  An explicit `--schema` still overrides the qualifier, and the flag forms keep working.
+- Command-layer tests against an injected fake ODBC driver (`test/fakeDb.ts`), covering
+  `home`, `list`, `inspect`, `sample`, `query`, `explain`, `plan`, `execute`, and `doctor`
+  without a live SQL Server.
+- `pnpm run typecheck` script, run in CI.
+- Explicit `vitest.config.ts`.
+
+### Changed
+
+- CI: added `concurrency` with `cancel-in-progress`, a job timeout, a typecheck step, and
+  bumped `actions/checkout` / `actions/setup-node` to v5.
+- Dependencies: `@toon-format/toon` 2 → 4, `vitest` 2 → 4, TypeScript 5.9, `tsx` 4.20.
+  The Node engine requirement stays at `>=20`.
+- README rewritten (why-not-MCP framing, agent/skill integration, configuration and
+  safety sections).
+- `SKILL.md` and per-command help now document the positional shorthand.
+
+### Fixed
+
+- `mssql-axi inspect table Users` used the kind positional as the object name, so it
+  looked up a table literally called `table`.
+
 ## [0.1.0] - 2025-07-27
 
 Initial release.
