@@ -1,8 +1,9 @@
 import { AxiError } from "axi-sdk-js";
-import { parseArgs, sqlArgument } from "../lib/args.js";
+import { assertMaxPositionals, parseArgs, sqlArgument } from "../lib/args.js";
 import { resolveConnection } from "../lib/config.js";
 import { withDatabase } from "../lib/connect.js";
 import { redactSecrets } from "../lib/redact.js";
+import { errorMessage } from "../lib/errors.js";
 import { validateReadOnly } from "../lib/readOnlyGuard.js";
 import { DEFAULT_CELL_CAP, truncateRow } from "../lib/truncate.js";
 
@@ -29,6 +30,12 @@ export async function queryCommand(args: readonly string[]): Promise<Record<stri
   }
 
   const sqlText = sqlArgument(parsed);
+  assertMaxPositionals(
+    parsed,
+    1,
+    "query",
+    "Pass exactly one SELECT: `mssql-axi query \"SELECT ...\"`",
+  );
   if (!sqlText) {
     throw new AxiError("a SQL statement is required for query", "VALIDATION_ERROR", [
       "Pass it positionally: `mssql-axi query \"SELECT ...\"`",
@@ -63,11 +70,15 @@ export async function queryCommand(args: readonly string[]): Promise<Record<stri
             ? (first["Microsoft SQL Server 2000 XML Showplan"] as string)
             : Object.values(first)[0];
           await db.query("SET SHOWPLAN_XML OFF");
+          const xmlText = typeof xml === "string" ? xml : null;
           return {
             plan: "showplan",
-            ...summarizePlan(typeof xml === "string" ? xml : null),
+            ...summarizePlan(xmlText),
+            ...(full && xmlText ? { fullXml: xmlText } : {}),
             help: [
-              "Use --full to see the full Showplan XML",
+              ...(full
+                ? []
+                : ["Use --full to see the full Showplan XML"]),
               "Run `mssql-axi query --sql \"...\"` to execute the SELECT normally",
             ],
           };
@@ -106,7 +117,7 @@ export async function queryCommand(args: readonly string[]): Promise<Record<stri
     });
   } catch (err) {
     if (err instanceof AxiError) throw err;
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     throw new AxiError(
       `query failed: ${redactSecrets(message, [resolved.connectionString])}`,
       "CONNECTION_FAILED",

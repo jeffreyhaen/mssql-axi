@@ -60,6 +60,13 @@ describe("home command", () => {
       code: "UNKNOWN_FLAG",
     });
   });
+
+  it("rejects positional arguments", async () => {
+    useFakeDb();
+    await expect(homeCommand([...CONNECTION_ARGS, "extra"])).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+  });
 });
 
 describe("list command", () => {
@@ -90,11 +97,50 @@ describe("list command", () => {
   });
 
   it("accepts the kind as a positional", async () => {
-    const db = useFakeDb({ rules: [[/FROM sys\.views/i, [{ schema: "dbo", name: "vUsers" }]]] });
+    const db = useFakeDb({
+      rules: [
+        [/COUNT\(\*\) AS total FROM sys\.views/i, [{ total: 1 }]],
+        [/FROM sys\.views/i, [{ schema: "dbo", name: "vUsers" }]],
+      ],
+    });
     const out = await listCommand([...CONNECTION_ARGS, "views"]);
     expect(out.kind).toBe("views");
     expect(out.views).toEqual([{ schema: "dbo", name: "vUsers" }]);
     expect(db.queries.some((q) => /FROM sys\.views/.test(q))).toBe(true);
+  });
+
+  it("reports the real totalCount for views when --limit cuts the list", async () => {
+    useFakeDb({
+      rules: [
+        [/COUNT\(\*\) AS total FROM sys\.views/i, [{ total: 42 }]],
+        [/FROM sys\.views/i, [{ schema: "dbo", name: "vUsers" }]],
+      ],
+    });
+    const out = await listCommand([...CONNECTION_ARGS, "views", "--limit", "1"]);
+    expect(out.count).toBe(1);
+    expect(out.totalCount).toBe(42);
+  });
+
+  it("reports the real totalCount for indexes and schemas too", async () => {
+    useFakeDb({
+      rules: [
+        [/COUNT\(\*\) AS total FROM sys\.indexes/i, [{ total: 30 }]],
+        [/FROM sys\.indexes/i, [{ schema: "dbo", table: "Users", name: "IX_1", typeDesc: "NONCLUSTERED" }]],
+      ],
+    });
+    const idx = await listCommand([...CONNECTION_ARGS, "indexes", "--limit", "1"]);
+    expect(idx.totalCount).toBe(30);
+    expect(idx.count).toBe(1);
+
+    useFakeDb({
+      rules: [
+        [/COUNT\(\*\) AS total FROM sys\.schemas/i, [{ total: 9 }]],
+        [/FROM sys\.schemas/i, [{ name: "dbo", tables: 3 }]],
+      ],
+    });
+    const sch = await listCommand([...CONNECTION_ARGS, "schemas", "--limit", "1"]);
+    expect(sch.totalCount).toBe(9);
+    expect(sch.count).toBe(1);
   });
 
   it("passes --schema through as a filter and applies --limit", async () => {
@@ -116,6 +162,20 @@ describe("list command", () => {
     await expect(
       listCommand([...CONNECTION_ARGS, "--kind", "tables", "--limit", "0"]),
     ).rejects.toBeInstanceOf(AxiError);
+  });
+
+  it("rejects a second positional kind", async () => {
+    useFakeDb();
+    await expect(
+      listCommand([...CONNECTION_ARGS, "tables", "views"]),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  it("no longer accepts the unused --full flag", async () => {
+    useFakeDb();
+    await expect(
+      listCommand([...CONNECTION_ARGS, "tables", "--full"]),
+    ).rejects.toMatchObject({ code: "UNKNOWN_FLAG" });
   });
 });
 
@@ -207,6 +267,35 @@ describe("inspect command", () => {
       inspectCommand([...CONNECTION_ARGS, "--kind", "procedure", "--name", "x"]),
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
+
+  it("rejects a third positional", async () => {
+    useFakeDb();
+    await expect(
+      inspectCommand([...CONNECTION_ARGS, "table", "dbo.Users", "extra"]),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  const VIEW_DEF = "CREATE VIEW dbo.vBig AS SELECT " + "col, ".repeat(1000) + "1 FROM dbo.T";
+  const VIEW_RULES: QueryRule[] = [
+    [/FROM sys\.views v/i, [{ objectId: 7, definition: VIEW_DEF }]],
+    [/FROM sys\.columns c JOIN sys\.types/i, [{ name: "id", type: "int", maxLength: 4, nullable: false }]],
+  ];
+
+  it("truncates a long view definition by default", async () => {
+    useFakeDb({ rules: VIEW_RULES });
+    const out = await inspectCommand([...CONNECTION_ARGS, "view", "dbo.vBig"]);
+    expect(out.definitionTruncated).toBe(true);
+    expect(out.definitionChars).toBe(VIEW_DEF.length);
+    expect(String(out.definition).length).toBeLessThan(VIEW_DEF.length);
+    expect(String(out.definition)).toContain("use --full");
+  });
+
+  it("returns the full view definition with --full", async () => {
+    useFakeDb({ rules: VIEW_RULES });
+    const out = await inspectCommand([...CONNECTION_ARGS, "view", "dbo.vBig", "--full"]);
+    expect(out.definition).toBe(VIEW_DEF);
+    expect(out.definitionTruncated).toBeUndefined();
+  });
 });
 
 const SAMPLE_RULES: QueryRule[] = [
@@ -263,6 +352,36 @@ describe("sample command", () => {
     expect(db.queries.some((q) => /WHERE \(id > 10\)/.test(q))).toBe(true);
   });
 
+  it("rejects a stacked statement in --where before opening a connection", async () => {
+    const db = useFakeDb({ rules: SAMPLE_RULES });
+    await expect(
+      sampleCommand([...CONNECTION_ARGS, "dbo.Users", "--where", "1=1); DELETE FROM dbo.Users; --"]),
+    ).rejects.toMatchObject({ code: "READ_ONLY" });
+    expect(db.opened).toBe(0);
+    expect(db.queries).toHaveLength(0);
+  });
+
+  it("rejects a SELECT INTO breakout in --where before opening a connection", async () => {
+    const db = useFakeDb({ rules: SAMPLE_RULES });
+    await expect(
+      sampleCommand([
+        ...CONNECTION_ARGS,
+        "dbo.Users",
+        "--where",
+        "1=1) INTO dbo.Stolen FROM dbo.Users WHERE (1=1",
+      ]),
+    ).rejects.toMatchObject({ code: "READ_ONLY" });
+    expect(db.opened).toBe(0);
+  });
+
+  it("rejects forbidden keywords in --where before opening a connection", async () => {
+    const db = useFakeDb({ rules: SAMPLE_RULES });
+    await expect(
+      sampleCommand([...CONNECTION_ARGS, "dbo.Users", "--where", "id = 1; EXEC xp_cmdshell 'dir'"]),
+    ).rejects.toMatchObject({ code: "READ_ONLY" });
+    expect(db.opened).toBe(0);
+  });
+
   it("reports NOT_FOUND for a missing object", async () => {
     useFakeDb({ rules: [] });
     await expect(sampleCommand([...CONNECTION_ARGS, "dbo.Ghost"])).rejects.toMatchObject({
@@ -275,5 +394,12 @@ describe("sample command", () => {
     await expect(sampleCommand([...CONNECTION_ARGS])).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
     });
+  });
+
+  it("rejects a second positional object", async () => {
+    useFakeDb();
+    await expect(
+      sampleCommand([...CONNECTION_ARGS, "dbo.Users", "dbo.Orders"]),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
 });

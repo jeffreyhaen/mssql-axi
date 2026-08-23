@@ -16,6 +16,22 @@ All notable changes to mssql-axi are documented here. This project follows
   without a live SQL Server.
 - `pnpm run typecheck` script, run in CI.
 - Explicit `vitest.config.ts`.
+- `inspect view` truncates the definition at 2000 chars by default (`definitionTruncated`
+  + `definitionChars` in the output); `--full` returns the complete definition.
+- `mssql-axi home` is also registered as an explicit command, so the home view can be
+  combined with connection flags (`mssql-axi home --connection-string ...`).
+- Errors wrapping an `odbc` failure now append the first ODBC diagnostic (SQLSTATE,
+  native message) instead of only the generic `[odbc] Error ...` line.
+- Connection strings containing .NET `SqlConnection` keywords (`Data Source`,
+  `Initial Catalog`, `Integrated Security`, `MultipleActiveResultSets`, and for
+  Driver 18 the spaced `Trust Server Certificate`) are rejected up front with the ODBC
+  equivalent in the error. Previously `Initial Catalog` was silently ignored by the
+  driver and the session landed in `master` instead of the requested database.
+- `doctor` connectivity help now covers the Driver 18 `Encrypt=Mandatory` /
+  `TrustServerCertificate` (no spaces) gotcha for local and named instances.
+- `docs/connection-strings.md`: troubleshooting section for Driver 18 encryption
+  defaults, the `TrustServerCertificate` spelling, and named-instance/dynamic-port
+  resolution via SQL Browser.
 
 ### Changed
 
@@ -26,11 +42,35 @@ All notable changes to mssql-axi are documented here. This project follows
 - README rewritten (why-not-MCP framing, agent/skill integration, configuration and
   safety sections).
 - `SKILL.md` and per-command help now document the positional shorthand.
+- Command handlers are lazy-loaded in the CLI entrypoint, so `--version` and `--help`
+  no longer load the ODBC driver or any command code.
+- `setup role`/`hooks`/`config` each accept only the flags they actually use
+  (`--output`, `--marker`); the unused shared `--name` flag is removed. `setup --help`
+  (also shown for `setup hooks --help`, which the SDK intercepts) now lists every
+  subcommand with its flags.
+- Example connection strings use `TrustServerCertificate` (no spaces), the only spelling
+  Driver 18 accepts.
 
 ### Fixed
 
 - `mssql-axi inspect table Users` used the kind positional as the object name, so it
   looked up a table literally called `table`.
+- **Read-only enforcement:** `SELECT ... INTO` (which writes a new table) and `WAITFOR`
+  are now rejected by `validateReadOnly()`, and a `;` inside parentheses is treated as a
+  stacked statement (T-SQL never allows a terminator inside an expression). Bracketed
+  identifiers containing `;` remain valid.
+- **`sample --where` is validated read-only before a connection opens**: the fragment is
+  validated as part of the composed SELECT, so stacked statements, hidden terminators,
+  `SELECT INTO` breakouts, and forbidden keywords fail fast with a structured
+  `READ_ONLY` error (exit 2).
+- **No more silently ignored input:** every command rejects extra positional arguments
+  (`VALIDATION_ERROR`). `plan` no longer accepts connection flags it never used, and
+  `list` no longer accepts the unused `--full` flag — both now fail with
+  `UNKNOWN_FLAG`.
+- `list views|indexes|schemas --limit N` now reports the real `totalCount` via a COUNT
+  query instead of echoing the returned row count.
+- `query --full` with a `SET SHOWPLAN_XML` sequence now actually returns the full XML in
+  `fullXml`, matching its own help text (previously only `explain --full` did).
 
 ## [0.1.0] - 2025-07-27
 

@@ -26,6 +26,8 @@ export interface FakeDb {
   /** Every SQL string the command sent, in order. */
   queries: string[];
   executed: string[];
+  /** How many times a connection was opened. */
+  opened: number;
   closed: number;
 }
 
@@ -34,10 +36,11 @@ export interface FakeDb {
  * SQL Server. Automatically restored after each test.
  */
 export function useFakeDb(options: FakeDbOptions = {}): FakeDb {
-  const state: FakeDb = { queries: [], executed: [], closed: 0 };
+  const state: FakeDb = { queries: [], executed: [], opened: 0, closed: 0 };
   const rules = options.rules ?? [];
 
   setDatabaseOpener(async () => {
+    state.opened += 1;
     if (options.openError) throw options.openError;
     const db: Database = {
       driver: "odbc",

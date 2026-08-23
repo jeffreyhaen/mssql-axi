@@ -1,8 +1,9 @@
 import { AxiError } from "axi-sdk-js";
-import { parseArgs } from "../lib/args.js";
+import { assertMaxPositionals, parseArgs } from "../lib/args.js";
 import { resolveConnection } from "../lib/config.js";
 import { withDatabase } from "../lib/connect.js";
 import { redactSecrets } from "../lib/redact.js";
+import { errorMessage } from "../lib/errors.js";
 import { sqlString } from "../lib/sql.js";
 
 const KINDS = ["tables", "views", "indexes", "schemas"] as const;
@@ -15,7 +16,6 @@ const KNOWN_FLAGS = [
   "kind",
   "schema",
   "limit",
-  "full",
 ];
 
 const HELP_TEXT = [
@@ -34,7 +34,12 @@ export async function listCommand(args: readonly string[]): Promise<Record<strin
   }
 
   const kind = pickKind(parsed);
-
+  assertMaxPositionals(
+    parsed,
+    1,
+    "list",
+    "Pass at most one kind: `mssql-axi list tables`",
+  );
   const resolved = resolveConnection({
     connectionString:
       typeof parsed.flags["connection-string"] === "string"
@@ -62,7 +67,7 @@ export async function listCommand(args: readonly string[]): Promise<Record<strin
     });
   } catch (err) {
     if (err instanceof AxiError) throw err;
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     throw new AxiError(
       `list failed: ${redactSecrets(message, [resolved.connectionString])}`,
       "CONNECTION_FAILED",
@@ -162,9 +167,14 @@ async function listViews(
       `WHERE v.is_ms_shipped = 0${schemaFilter} ` +
       `ORDER BY s.name, v.name`,
   );
+  const totalRes = await db.query<{ total: number }>(
+    `SELECT COUNT(*) AS total FROM sys.views v ` +
+      `JOIN sys.schemas s ON v.schema_id = s.schema_id ` +
+      `WHERE v.is_ms_shipped = 0${schemaFilter}`,
+  );
   return {
     items: rows.map((r) => ({ schema: r.schema, name: r.name })),
-    total: rows.length,
+    total: Number(totalRes[0]?.total ?? 0),
   };
 }
 
@@ -183,6 +193,12 @@ async function listIndexes(
       `WHERE i.is_hypothetical = 0 AND i.is_disabled = 0 AND o.is_ms_shipped = 0${schemaFilter} ` +
       `ORDER BY s.name, o.name, i.name`,
   );
+  const totalRes = await db.query<{ total: number }>(
+    `SELECT COUNT(*) AS total FROM sys.indexes i ` +
+      `JOIN sys.objects o ON i.object_id = o.object_id ` +
+      `JOIN sys.schemas s ON o.schema_id = s.schema_id ` +
+      `WHERE i.is_hypothetical = 0 AND i.is_disabled = 0 AND o.is_ms_shipped = 0${schemaFilter}`,
+  );
   return {
     items: rows.map((r) => ({
       schema: r.schema,
@@ -190,7 +206,7 @@ async function listIndexes(
       name: r.name,
       type: r.typeDesc,
     })),
-    total: rows.length,
+    total: Number(totalRes[0]?.total ?? 0),
   };
 }
 
@@ -206,8 +222,11 @@ async function listSchemas(
       `WHERE s.principal_id = 1 ` +
       `ORDER BY s.name`,
   );
+  const totalRes = await db.query<{ total: number }>(
+    "SELECT COUNT(*) AS total FROM sys.schemas s WHERE s.principal_id = 1",
+  );
   return {
     items: rows.map((r) => ({ name: r.name, tables: Number(r.tables) })),
-    total: rows.length,
+    total: Number(totalRes[0]?.total ?? 0),
   };
 }

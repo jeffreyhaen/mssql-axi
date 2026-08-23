@@ -3,6 +3,8 @@
  * Supports `--key value`, `--key=value`, and bare `--key` (value: true).
  * Positional args are accessible via `parsePositional()`.
  */
+import { AxiError } from "axi-sdk-js";
+
 export interface ParsedArgs {
   flags: Record<string, string | boolean>;
   positionals: string[];
@@ -122,6 +124,25 @@ export function flagNumber(args: ParsedArgs, name: string): number | undefined {
     throw new Error(`flag --${name} expects a number, got '${v}'`);
   }
   return n;
+}
+
+/**
+ * Refuses extra positional arguments so the agent never believes input was
+ * used when it was silently dropped (AXI principle 6). `max` is the number of
+ * positionals the command actually consumes.
+ */
+export function assertMaxPositionals(
+  args: ParsedArgs,
+  max: number,
+  commandName: string,
+  usage: string,
+): void {
+  if (args.positionals.length <= max) return;
+  throw new AxiError(
+    `too many arguments for '${commandName}': got ${args.positionals.length}, expected at most ${max} (unexpected: '${args.positionals[max]}')`,
+    "VALIDATION_ERROR",
+    [usage],
+  );
 }
 
 /**

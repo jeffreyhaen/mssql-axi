@@ -1,8 +1,10 @@
 import { AxiError } from "axi-sdk-js";
-import { objectTarget, parseArgs } from "../lib/args.js";
+import { assertMaxPositionals, objectTarget, parseArgs } from "../lib/args.js";
 import { resolveConnection } from "../lib/config.js";
 import { withDatabase } from "../lib/connect.js";
 import { redactSecrets } from "../lib/redact.js";
+import { errorMessage } from "../lib/errors.js";
+import { validateReadOnly } from "../lib/readOnlyGuard.js";
 import { sqlIdentifier, sqlString } from "../lib/sql.js";
 import { DEFAULT_CELL_CAP, truncateRow } from "../lib/truncate.js";
 
@@ -30,6 +32,12 @@ export async function sampleCommand(args: readonly string[]): Promise<Record<str
   }
 
   const target = objectTarget(parsed, 0);
+  assertMaxPositionals(
+    parsed,
+    1,
+    "sample",
+    "Pass exactly one object: `mssql-axi sample dbo.Users`",
+  );
   const schema = target.schema ?? "dbo";
   const name = target.name;
   if (!name) {
@@ -41,6 +49,16 @@ export async function sampleCommand(args: readonly string[]): Promise<Record<str
   const where = typeof parsed.flags.where === "string" ? parsed.flags.where : undefined;
   const full = parsed.flags.full === true;
   const limit = clampLimit(parsed.flags.limit);
+
+  // Validate the --where fragment as part of the read-only safety layer BEFORE
+  // any connection is opened. The fragment is embedded in the same composed
+  // SELECT shape the query will use, so stacked statements, comments that hide
+  // a terminator, SELECT INTO breakouts, and forbidden keywords are all caught
+  // by the one canonical validator.
+  const quotedTarget = `${sqlIdentifier(schema)}.${sqlIdentifier(name)}`;
+  if (where) {
+    validateReadOnly(`SELECT 1 FROM ${quotedTarget} WHERE (${where})`);
+  }
 
   const resolved = resolveConnection({
     connectionString:
@@ -66,7 +84,7 @@ export async function sampleCommand(args: readonly string[]): Promise<Record<str
           `Run \`mssql-axi list --kind tables --schema ${schema}\` to see available objects`,
         ]);
       }
-      const quoted = `${sqlIdentifier(schema)}.${sqlIdentifier(name)}`;
+      const quoted = quotedTarget;
       const columnRows = await db.query<{ name: string; type: string; maxLength: number }>(
         "SELECT c.name, t.name AS type, c.max_length AS maxLength " +
           "FROM sys.columns c " +
@@ -105,7 +123,7 @@ export async function sampleCommand(args: readonly string[]): Promise<Record<str
     });
   } catch (err) {
     if (err instanceof AxiError) throw err;
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     throw new AxiError(
       `sample failed: ${redactSecrets(message, [resolved.connectionString])}`,
       "CONNECTION_FAILED",

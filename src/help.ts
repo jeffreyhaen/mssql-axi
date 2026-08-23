@@ -38,13 +38,14 @@ export const COMMAND_HELP: Record<string, string> = {
     "  mssql-axi list views --schema sales",
   ].join("\n"),
   inspect: [
-    "mssql-axi inspect [kind] <dbo.Object>",
+    "mssql-axi inspect [kind] <dbo.Object> [--full]",
     "",
     "Kinds: table | view | index (default: table). Flags --kind/--schema/--name also work.",
+    "View definitions preview at 2000 chars; --full returns the complete definition.",
     "",
     "Examples:",
     "  mssql-axi inspect dbo.Users",
-    "  mssql-axi inspect view dbo.vActiveUsers",
+    "  mssql-axi inspect view dbo.vActiveUsers --full",
     "  mssql-axi inspect --kind table --schema sales --name Orders",
   ].join("\n"),
   sample: [
@@ -82,10 +83,18 @@ export const COMMAND_HELP: Record<string, string> = {
     "",
     "Runs SET SHOWPLAN_XML ON and summarises the physical operators and cost.",
   ].join("\n"),
+  // Note: the SDK intercepts `--help` before the setup handler runs, so
+  // `mssql-axi setup hooks --help` also lands here. Keep every subcommand's
+  // flags in this one text so that behaviour stays correct and complete.
   setup: [
     "mssql-axi setup <subcommand>",
     "",
-    "Subcommands: role | hooks | config",
+    "Subcommands:",
+    "  mssql-axi setup role [--output <file>]   # print T-SQL creating the agent_reader role",
+    "  mssql-axi setup hooks [--marker <name>]  # install SessionStart hooks (default marker: mssql-axi)",
+    "  mssql-axi setup config [--output <file>] # write an example mssql-axi.config.json",
+    "",
+    "Only the flags listed per subcommand are accepted.",
   ].join("\n"),
 };
 

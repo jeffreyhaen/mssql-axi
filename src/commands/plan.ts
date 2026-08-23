@@ -1,20 +1,10 @@
 import { AxiError } from "axi-sdk-js";
-import { parseArgs, sqlArgument } from "../lib/args.js";
+import { assertMaxPositionals, parseArgs, sqlArgument } from "../lib/args.js";
 import { isDestructive, normaliseSql } from "../lib/normalize.js";
 
-const KNOWN_FLAGS = [
-  "server",
-  "database",
-  "user",
-  "password",
-  "password-env",
-  "auth-type",
-  "connection",
-  "config",
-  "connection-string",
-  "sql",
-  "allow-destructive",
-];
+// plan never opens a connection, so connection flags are intentionally NOT
+// accepted: accepting-and-ignoring them would imply they affect the output.
+const KNOWN_FLAGS = ["sql", "allow-destructive"];
 
 export async function planCommand(args: readonly string[]): Promise<Record<string, unknown>> {
   const parsed = parseArgs(args);
@@ -27,6 +17,12 @@ export async function planCommand(args: readonly string[]): Promise<Record<strin
   }
 
   const sqlText = sqlArgument(parsed);
+  assertMaxPositionals(
+    parsed,
+    1,
+    "plan",
+    "Pass exactly one SQL statement: `mssql-axi plan \"UPDATE ...\"`",
+  );
   if (!sqlText) {
     throw new AxiError("a SQL statement is required for plan", "VALIDATION_ERROR", [
       "Pass it positionally: `mssql-axi plan \"INSERT ...\"`",

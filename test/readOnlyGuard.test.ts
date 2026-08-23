@@ -73,6 +73,8 @@ describe("validateReadOnly - negative", () => {
     ["ALTER", "ALTER TABLE dbo.Users ADD col INT"],
     ["CREATE", "CREATE TABLE dbo.X (id INT)"],
     ["BACKUP", "BACKUP DATABASE app TO DISK = 'x'"],
+    ["SELECT INTO", "SELECT * INTO dbo.Stolen FROM dbo.Users"],
+    ["SELECT INTO with column list", "SELECT id INTO #tmp FROM dbo.Users"],
   ] as const;
 
   for (const [label, sql] of forbidden) {
@@ -92,6 +94,15 @@ describe("validateReadOnly - negative", () => {
 
   it("rejects stacked statements", () => {
     expect(() => validateReadOnly("SELECT 1; SELECT 2")).toThrow(/stacked/);
+  });
+
+  it("rejects a statement terminator nested inside parentheses", () => {
+    expect(() => validateReadOnly("SELECT 1 FROM t WHERE (1=1; WAITFOR DELAY '0:0:10')")).toThrow();
+  });
+
+  it("accepts a bracketed identifier containing a semicolon", () => {
+    const plan = validateReadOnly("SELECT [my;col] FROM dbo.T");
+    expect(plan.kind).toBe("select");
   });
 
   it("rejects empty input", () => {
@@ -114,6 +125,20 @@ describe("validateReadOnly - negative", () => {
     expect(() =>
       validateReadOnly("SET SHOWPLAN_XML ON; DELETE FROM x; SET SHOWPLAN_XML OFF"),
     ).toThrow();
+  });
+
+  it("rejects SELECT INTO inside a WITH cte", () => {
+    expect(() =>
+      validateReadOnly("WITH cte AS (SELECT 1 AS id) SELECT * INTO dbo.X FROM cte"),
+    ).toThrow(/INTO/);
+  });
+
+  it("rejects SELECT INTO in the middle of a SHOWPLAN_XML sequence", () => {
+    expect(() =>
+      validateReadOnly(
+        "SET SHOWPLAN_XML ON; SELECT id INTO dbo.X FROM dbo.Users; SET SHOWPLAN_XML OFF",
+      ),
+    ).toThrow(/INTO/);
   });
 
   it("rejects SQL over the size limit", () => {

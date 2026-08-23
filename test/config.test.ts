@@ -12,8 +12,8 @@ const ENV_KEYS = [
 
 const ENV_BACKUP: Record<string, string | undefined> = {};
 
-const ODBC_DEV = "Driver={ODBC Driver 17 for SQL Server};Server=localhost;Database=app;Trusted_Connection=Yes;Trust Server Certificate=Yes;";
-const ODBC_AZURE = "Driver={ODBC Driver 18 for SQL Server};Server=tcp:host.database.windows.net,1433;Initial Catalog=app;Authentication=ActiveDirectoryInteractive;Encrypt=Yes;";
+const ODBC_DEV = "Driver={ODBC Driver 17 for SQL Server};Server=localhost;Database=app;Trusted_Connection=Yes;TrustServerCertificate=Yes;";
+const ODBC_AZURE = "Driver={ODBC Driver 18 for SQL Server};Server=tcp:host.database.windows.net,1433;Database=app;Authentication=ActiveDirectoryInteractive;Encrypt=Yes;";
 
 beforeEach(() => {
   for (const k of ENV_KEYS) {
@@ -41,6 +41,39 @@ describe("resolveConnection (flags)", () => {
     expect(() =>
       resolveConnection({ connectionString: "Server=localhost;Database=app" }),
     ).toThrow(AxiError);
+  });
+
+  it("rejects a pasted .NET SqlConnection string (Initial Catalog would land in master)", () => {
+    const dotnet =
+      "Driver={ODBC Driver 18 for SQL Server};Data Source=host.database.windows.net;Initial Catalog=app;Authentication=ActiveDirectoryIntegrated;Encrypt=Yes;MultipleActiveResultSets=False;";
+    try {
+      resolveConnection({ connectionString: dotnet });
+      expect.unreachable();
+    } catch (e) {
+      const err = e as AxiError;
+      expect(err.code).toBe("VALIDATION_ERROR");
+      expect(err.message).toContain(".NET");
+      const text = err.suggestions.join(" ");
+      expect(text).toContain("Database=");
+      expect(text).toContain("Server=");
+      expect(text).toContain("MultipleActiveResultSets");
+    }
+  });
+
+  it("rejects the spaced Trust Server Certificate form only for Driver 18", () => {
+    const d18 =
+      "Driver={ODBC Driver 18 for SQL Server};Server=localhost;Database=app;Trusted_Connection=Yes;Trust Server Certificate=Yes;";
+    try {
+      resolveConnection({ connectionString: d18 });
+      expect.unreachable();
+    } catch (e) {
+      const err = e as AxiError;
+      expect(err.code).toBe("VALIDATION_ERROR");
+      expect(err.suggestions.join(" ")).toContain("TrustServerCertificate");
+    }
+    // Driver 17 accepts the spaced form: no rejection.
+    const d17 = ODBC_DEV.replace("TrustServerCertificate", "Trust Server Certificate");
+    expect(() => resolveConnection({ connectionString: d17 })).not.toThrow();
   });
 });
 

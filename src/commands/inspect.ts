@@ -1,9 +1,11 @@
 import { AxiError } from "axi-sdk-js";
-import { objectTarget, parseArgs } from "../lib/args.js";
+import { assertMaxPositionals, objectTarget, parseArgs } from "../lib/args.js";
 import { resolveConnection } from "../lib/config.js";
 import { withDatabase } from "../lib/connect.js";
 import { redactSecrets } from "../lib/redact.js";
+import { errorMessage } from "../lib/errors.js";
 import { sqlString } from "../lib/sql.js";
+import { truncateCell } from "../lib/truncate.js";
 
 const KINDS = ["table", "view", "index"] as const;
 type Kind = (typeof KINDS)[number];
@@ -15,7 +17,11 @@ const KNOWN_FLAGS = [
   "kind",
   "schema",
   "name",
+  "full",
 ];
+
+/** View definitions preview at this length; --full returns the whole text. */
+const DEFINITION_CAP = 2000;
 
 export async function inspectCommand(args: readonly string[]): Promise<Record<string, unknown>> {
   const parsed = parseArgs(args);
@@ -29,6 +35,12 @@ export async function inspectCommand(args: readonly string[]): Promise<Record<st
 
   const { kind, positionals } = pickKind(parsed);
   const target = objectTarget({ flags: parsed.flags, positionals }, 0);
+  assertMaxPositionals(
+    { flags: parsed.flags, positionals },
+    1,
+    "inspect",
+    `Pass exactly one object: \`mssql-axi inspect ${kind} dbo.Users\``,
+  );
   const schema = target.schema;
   const name = target.name;
   if (!name) {
@@ -47,17 +59,18 @@ export async function inspectCommand(args: readonly string[]): Promise<Record<st
       typeof parsed.flags.connection === "string" ? parsed.flags.connection : undefined,
     configPath: typeof parsed.flags.config === "string" ? parsed.flags.config : undefined,
   });
+  const full = parsed.flags.full === true;
 
   try {
     return await withDatabase(resolved.connectionString, async (db) => {
       const targetSchema = schema ?? "dbo";
       if (kind === "table") return await inspectTable(db, targetSchema, name);
-      if (kind === "view") return await inspectView(db, targetSchema, name);
+      if (kind === "view") return await inspectView(db, targetSchema, name, full);
       return await inspectIndex(db, targetSchema, name);
     });
   } catch (err) {
     if (err instanceof AxiError) throw err;
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     throw new AxiError(
       `inspect failed: ${redactSecrets(message, [resolved.connectionString])}`,
       "CONNECTION_FAILED",
@@ -196,6 +209,7 @@ async function inspectView(
   db: import("../lib/driver/index.js").Database,
   schema: string,
   name: string,
+  full: boolean,
 ): Promise<Record<string, unknown>> {
   const schemaLit = sqlString(schema);
   const nameLit = sqlString(name);
@@ -217,6 +231,10 @@ async function inspectView(
       "FROM sys.columns c JOIN sys.types ty ON c.user_type_id = ty.user_type_id " +
       `WHERE c.object_id = ${objectIdLit} ORDER BY c.column_id`,
   );
+  const definition =
+    obj.definition === null || full
+      ? { value: obj.definition, truncated: false, totalChars: obj.definition?.length ?? 0 }
+      : truncateCell(obj.definition, DEFINITION_CAP);
   return {
     kind: "view",
     schema,
@@ -226,8 +244,14 @@ async function inspectView(
       type: formatType(c.type, c.maxLength),
       nullable: c.nullable,
     })),
-    definition: obj.definition,
+    definition: definition.value,
+    ...(definition.truncated
+      ? { definitionTruncated: true, definitionChars: definition.totalChars }
+      : {}),
     help: [
+      ...(definition.truncated
+        ? [`Run \`mssql-axi inspect view ${schema}.${name} --full\` for the full definition (${definition.totalChars} chars)`]
+        : []),
       `Run \`mssql-axi query --sql "SELECT TOP 10 * FROM ${schema}.${name}"\` to inspect data`,
     ],
   };

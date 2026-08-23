@@ -50,4 +50,16 @@ describe("mssql-axi CLI (built)", () => {
     expect(stdout).toContain("error");
     expect(stdout).toContain("VALIDATION_ERROR");
   });
+
+  it("setup hooks --help shows the subcommand flags (SDK intercepts --help)", async () => {
+    const { stdout } = await execFileAsync("node", [bin, "setup", "hooks", "--help"]);
+    expect(stdout).toContain("setup role");
+    expect(stdout).toContain("--output");
+    expect(stdout).toContain("--marker");
+  });
+
+  it("inspect --help documents --full for view definitions", async () => {
+    const { stdout } = await execFileAsync("node", [bin, "inspect", "--help"]);
+    expect(stdout).toContain("--full");
+  });
 });

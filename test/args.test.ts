@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { AxiError } from "axi-sdk-js";
 import {
   assertKnownFlags,
+  assertMaxPositionals,
   flagBool,
   flagNumber,
   flagString,
@@ -138,6 +140,28 @@ describe("splitQualifiedName", () => {
 
   it("uses the last two parts of db.schema.name", () => {
     expect(splitQualifiedName("app.dbo.Users")).toEqual({ schema: "dbo", name: "Users" });
+  });
+});
+
+describe("assertMaxPositionals", () => {
+  it("passes when at or under the maximum", () => {
+    expect(() => assertMaxPositionals(parseArgs(["a", "b"]), 2, "cmd", "usage")).not.toThrow();
+    expect(() => assertMaxPositionals(parseArgs(["a"]), 2, "cmd", "usage")).not.toThrow();
+    expect(() => assertMaxPositionals(parseArgs([]), 0, "cmd", "usage")).not.toThrow();
+  });
+
+  it("throws a structured VALIDATION_ERROR naming the extra argument", () => {
+    try {
+      assertMaxPositionals(parseArgs(["a", "b", "c"]), 1, "sample", "usage hint");
+      expect.unreachable();
+    } catch (e) {
+      const err = e as AxiError;
+      expect(err).toBeInstanceOf(AxiError);
+      expect(err.code).toBe("VALIDATION_ERROR");
+      expect(err.message).toContain("too many arguments");
+      expect(err.message).toContain("'b'");
+      expect(err.suggestions).toEqual(["usage hint"]);
+    }
   });
 });
 

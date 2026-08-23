@@ -21,8 +21,8 @@ const MAX_SQL_LENGTH = 200_000;
  *  - A SET SHOWPLAN_XML ON; <SELECT>; SET SHOWPLAN_XML OFF; sequence.
  *
  * Rejected: anything with INSERT/UPDATE/DELETE/MERGE/DROP/TRUNCATE/EXEC/GRANT/REVOKE,
- * stacked statements, semicolons followed by another keyword, GO terminators,
- * or non-SELECT starting tokens.
+ * SELECT INTO (writes a new table), stacked statements, semicolons followed by
+ * another keyword, GO terminators, or non-SELECT starting tokens.
  */
 export function validateReadOnly(sql: string): ReadOnlyPlan {
   if (typeof sql !== "string") {
@@ -115,6 +115,8 @@ const FORBIDDEN_KEYWORDS = [
   "UPDATE",
   "DELETE",
   "MERGE",
+  // SELECT ... INTO writes a new table; INSERT INTO is already covered by INSERT.
+  "INTO",
   "DROP",
   "TRUNCATE",
   "EXEC",
@@ -129,6 +131,8 @@ const FORBIDDEN_KEYWORDS = [
   "KILL",
   "DBCC",
   "BULK",
+  // WAITFOR DELAY/TIME is side-effecting (blocks the session) without writing.
+  "WAITFOR",
   "OPENROWSET",
   "OPENDATASOURCE",
   "OPENQUERY",
@@ -175,9 +179,9 @@ function isShowplanSequence(parts: readonly string[]): boolean {
 
 function splitStatements(stmt: string): string[] {
   const out: string[] = [];
-  let depth = 0;
   let current = "";
   let inString: false | "'" | '"' = false;
+  let inBrackets = false;
   for (let i = 0; i < stmt.length; i++) {
     const ch = stmt[i]!;
     if (inString) {
@@ -193,14 +197,33 @@ function splitStatements(stmt: string): string[] {
       }
       continue;
     }
+    if (inBrackets) {
+      current += ch;
+      if (ch === "]") {
+        // ]] escapes a literal ] inside a bracketed identifier.
+        if (stmt[i + 1] === "]") {
+          current += stmt[i + 1]!;
+          i++;
+        } else {
+          inBrackets = false;
+        }
+      }
+      continue;
+    }
     if (ch === "'" || ch === '"') {
       inString = ch;
       current += ch;
       continue;
     }
-    if (ch === "(") depth++;
-    else if (ch === ")") depth = Math.max(0, depth - 1);
-    if (ch === ";" && depth === 0) {
+    if (ch === "[") {
+      inBrackets = true;
+      current += ch;
+      continue;
+    }
+    // A `;` outside a string/identifier terminates a statement no matter the
+    // paren depth: T-SQL never allows a statement terminator inside a
+    // parenthesised expression, so a nested `;` is always a stacked statement.
+    if (ch === ";") {
       const trimmed = current.trim();
       if (trimmed.length > 0) out.push(trimmed);
       current = "";

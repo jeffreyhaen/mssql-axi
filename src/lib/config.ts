@@ -105,12 +105,56 @@ function assertOdbc(
       "VALIDATION_ERROR",
       [
         "Local SQL Server with Windows Auth:  Driver={ODBC Driver 17 for SQL Server};Server=localhost\\SQLEXPRESS;Database=app;Trusted_Connection=Yes;",
-        "Azure SQL with AAD:                     Driver={ODBC Driver 18 for SQL Server};Server=tcp:host.database.windows.net,1433;Initial Catalog=app;Authentication=ActiveDirectoryInteractive;Encrypt=Yes;",
+        "Azure SQL with AAD:                     Driver={ODBC Driver 18 for SQL Server};Server=tcp:host.database.windows.net,1433;Database=app;Authentication=ActiveDirectoryInteractive;Encrypt=Yes;",
         "Run `mssql-axi setup config` for an example",
       ],
     );
   }
+  rejectDotNetKeywords(connectionString);
   return { connectionString, ...meta };
+}
+
+/**
+ * .NET SqlConnection keywords that people paste into connection strings. The
+ * ODBC driver does not recognise them: some are rejected with a generic
+ * "invalid attribute" error, others — like `Initial Catalog` — are SILENTLY
+ * IGNORED, which lands the session in `master` while the user believes they
+ * query their own database. Fail loud with the ODBC equivalent instead.
+ *
+ * `Trust Server Certificate` (spaced) is only rejected when Driver 18 is in
+ * play: Driver 17 accepts the spaced form, Driver 18 silently ignores it and
+ * then fails certificate validation.
+ */
+function rejectDotNetKeywords(connectionString: string): void {
+  const dotnetKeywords: Array<{ keyword: string; suggestion: string }> = [
+    { keyword: "Initial Catalog", suggestion: "use `Database=` (ODBC has no `Initial Catalog`)" },
+    { keyword: "Data Source", suggestion: "use `Server=`" },
+    { keyword: "Integrated Security", suggestion: "use `Trusted_Connection=Yes`" },
+    { keyword: "MultipleActiveResultSets", suggestion: "drop it (ODBC: `MARS_Connection=Yes` if ever needed)" },
+  ];
+  const found: string[] = [];
+  for (const { keyword, suggestion } of dotnetKeywords) {
+    const re = new RegExp(`(?:^|;)\\s*${keyword}\\s*=`, "i");
+    if (re.test(connectionString)) {
+      found.push(`\`${keyword}=\` — ${suggestion}`);
+    }
+  }
+  if (
+    /Driver\s*=\s*\{ODBC Driver 18/i.test(connectionString) &&
+    /(?:^|;)\s*Trust Server Certificate\s*=/i.test(connectionString)
+  ) {
+    found.push("`Trust Server Certificate=` — Driver 18 silently ignores the spaced form; use `TrustServerCertificate=` (no spaces)");
+  }
+  if (found.length > 0) {
+    throw new AxiError(
+      "connection string contains .NET SqlConnection keywords that ODBC silently ignores or rejects",
+      "VALIDATION_ERROR",
+      [
+        ...found,
+        "See docs/connection-strings.md for the ODBC cheat sheet",
+      ],
+    );
+  }
 }
 
 interface ConfigFile {

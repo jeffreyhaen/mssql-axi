@@ -75,8 +75,8 @@ mssql-axi doctor --connection dev
 {
   "default": "dev",
   "connections": {
-    "dev": "Driver={ODBC Driver 17 for SQL Server};Server=localhost\\SQLEXPRESS;Database=app;Trusted_Connection=Yes;Trust Server Certificate=Yes;",
-    "azure": "Driver={ODBC Driver 18 for SQL Server};Server=tcp:myapp.database.windows.net,1433;Initial Catalog=app;Authentication=ActiveDirectoryInteractive;Encrypt=Yes;"
+    "dev": "Driver={ODBC Driver 17 for SQL Server};Server=localhost\\SQLEXPRESS;Database=app;Trusted_Connection=Yes;TrustServerCertificate=Yes;",
+    "azure": "Driver={ODBC Driver 18 for SQL Server};Server=tcp:myapp.database.windows.net,1433;Database=app;Authentication=ActiveDirectoryInteractive;Encrypt=Yes;"
   }
 }
 ```

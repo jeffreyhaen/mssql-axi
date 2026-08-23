@@ -7,8 +7,9 @@ description: Use mssql-axi to inspect, query, and safely execute against Microso
 
 Agent-ergonomic CLI for Microsoft SQL Server and Azure SQL. Built on the native Microsoft
 ODBC Driver 17/18 via the [`odbc`](https://www.npmjs.com/package/odbc) Node package.
-Connection strings are passed through verbatim — paste the same string you use in
-`sqlcmd`, SSMS, or .NET, no translation.
+Connection strings must be **ODBC-style** (`Driver={...}`) — see
+[`docs/connection-strings.md`](docs/connection-strings.md) for the cheat sheet; .NET
+`SqlConnection` strings are not accepted verbatim.
 
 ## Critical safety contract
 
@@ -36,7 +37,7 @@ Connection strings are passed through verbatim — paste the same string you use
 npx -y github:jeffreyhaen/mssql-axi --version
 
 # Verify connectivity and role
-npx -y mssql-axi doctor --connection-string 'Driver={ODBC Driver 17 for SQL Server};Server=HOSTNAME\INSTANCENAME;Database=YOUR_DB;Trusted_Connection=Yes;Trust Server Certificate=Yes;'
+npx -y mssql-axi doctor --connection-string 'Driver={ODBC Driver 17 for SQL Server};Server=HOSTNAME\INSTANCENAME;Database=YOUR_DB;Trusted_Connection=Yes;TrustServerCertificate=Yes;'
 ```
 
 Connection resolution (first non-empty wins):
@@ -49,14 +50,15 @@ Connection resolution (first non-empty wins):
 
 **Important constraint for the `home` view (no-args invocation):** the SDK
 strips leading flags, so `mssql-axi --connection-string '...'` is rejected
-before the home handler runs. For the no-args home view you must use option
-2 (env var) or option 3 (config file with a `default` in the cwd). For every
-other command (`doctor`, `list`, `inspect`, `sample`, `query`, etc.) the
-flag form works fine.
+before the home handler runs. Use `mssql-axi home --connection-string '...'`
+(the explicit `home` command), or option 2 (env var) / 3 (config file with a
+`default` in the cwd). For every other command (`doctor`, `list`, `inspect`,
+`sample`, `query`, etc.) the flag form works fine.
 
-ODBC 18 is strict: only `Encrypt=Yes|No|Strict` (not `True`/`False`). ODBC 17 accepts
-both. See [`docs/connection-strings.md`](docs/connection-strings.md) for the full
-cheat sheet including Azure AD modes.
+Connection-string gotchas (Driver 18 encryption defaults, `TrustServerCertificate`
+spelling, rejected .NET keywords, named instances): see
+[`docs/connection-strings.md`](docs/connection-strings.md). mssql-axi rejects known-bad
+strings up front and appends the driver's own diagnostic to connection errors.
 
 ## Read commands
 
@@ -174,7 +176,8 @@ bypass). Errors are structured `{ error, code, help[] }` on stdout, never on std
 ## Reference
 
 - [README](README.md) — install, auth model, dev workflow
-- [docs/connection-strings.md](docs/connection-strings.md) — ODBC 17 vs 18 keyword
-  cheat sheet, Azure AD modes, and a one-liner per supported auth flow
+- [docs/connection-strings.md](docs/connection-strings.md) — canonical ODBC cheat
+  sheet: keyword differences 17 vs 18, Azure AD modes, troubleshooting (encryption
+  defaults, named instances, .NET-keyword rejection)
 - [kunchenguid/axi](https://github.com/kunchenguid/axi) — the 10 AXI design
   principles this CLI follows

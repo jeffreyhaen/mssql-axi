@@ -1,8 +1,9 @@
 import { AxiError } from "axi-sdk-js";
-import { parseArgs } from "../lib/args.js";
+import { assertMaxPositionals, parseArgs } from "../lib/args.js";
 import { resolveConnection } from "../lib/config.js";
 import { withDatabase } from "../lib/connect.js";
 import { redactSecrets } from "../lib/redact.js";
+import { errorMessage } from "../lib/errors.js";
 
 const KNOWN_FLAGS = [
   "connection-string",
@@ -19,6 +20,7 @@ export async function doctorCommand(args: readonly string[]): Promise<Record<str
       ]);
     }
   }
+  assertMaxPositionals(parsed, 0, "doctor", "doctor takes no arguments: `mssql-axi doctor`");
 
   let resolved: ReturnType<typeof resolveConnection>;
   try {
@@ -86,13 +88,14 @@ export async function doctorCommand(args: readonly string[]): Promise<Record<str
     });
   } catch (err) {
     if (err instanceof AxiError) throw err;
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     throw new AxiError(
       `connection failed: ${redactSecrets(message, [resolved.connectionString])}`,
       "CONNECTION_FAILED",
       [
         "Check your --connection-string for correctness",
         "Verify the ODBC driver is installed (ODBC Driver 17 or 18 for SQL Server)",
+        "Driver 18 defaults to Encrypt=Mandatory; for a local/named instance with a self-signed cert use `TrustServerCertificate=Yes` (no spaces) or `Encrypt=No`, or use `{ODBC Driver 17 for SQL Server}`",
         "Run `mssql-axi setup config` to generate a known-good example",
       ],
     );

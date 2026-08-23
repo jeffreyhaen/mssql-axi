@@ -75,6 +75,37 @@ describe("query command", () => {
     });
   });
 
+  it("rejects a second positional instead of ignoring it", async () => {
+    const db = useFakeDb();
+    await expect(
+      queryCommand([...CONNECTION_ARGS, "SELECT 1", "SELECT 2"]),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(db.opened).toBe(0);
+  });
+
+  it("summarises a SET SHOWPLAN_XML sequence without the raw XML by default", async () => {
+    useFakeDb({ rules: [[/FROM dbo\.Users/i, [{ xml: SHOWPLAN_XML }]]] });
+    const out = await queryCommand([
+      ...CONNECTION_ARGS,
+      "SET SHOWPLAN_XML ON; SELECT id FROM dbo.Users; SET SHOWPLAN_XML OFF",
+    ]);
+    expect(out.plan).toBe("showplan");
+    expect(out.physicalOps).toEqual(["Clustered Index Scan", "Nested Loops"]);
+    expect(out.fullXml).toBeUndefined();
+    expect((out.help as string[]).some((h) => h.includes("--full"))).toBe(true);
+  });
+
+  it("returns the full Showplan XML for a showplan sequence with --full", async () => {
+    useFakeDb({ rules: [[/FROM dbo\.Users/i, [{ xml: SHOWPLAN_XML }]]] });
+    const out = await queryCommand([
+      ...CONNECTION_ARGS,
+      "SET SHOWPLAN_XML ON; SELECT id FROM dbo.Users; SET SHOWPLAN_XML OFF",
+      "--full",
+    ]);
+    expect(out.plan).toBe("showplan");
+    expect(out.fullXml).toBe(SHOWPLAN_XML);
+  });
+
   it("wraps server errors and redacts the connection string", async () => {
     useFakeDb({ failOn: /SELECT/i, failWith: new Error("Invalid object name 'dbo.Ghost'") });
     await expect(
@@ -109,6 +140,13 @@ describe("explain command", () => {
     ).rejects.toMatchObject({ code: "READ_ONLY" });
     expect(db.queries).toEqual([]);
   });
+
+  it("rejects a second positional instead of ignoring it", async () => {
+    useFakeDb();
+    await expect(
+      explainCommand([...CONNECTION_ARGS, "SELECT 1", "SELECT 2"]),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
 });
 
 describe("plan command", () => {
@@ -131,6 +169,27 @@ describe("plan command", () => {
 
   it("requires a statement", async () => {
     await expect(planCommand([])).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  it("rejects a second positional", async () => {
+    await expect(
+      planCommand(["SELECT 1", "SELECT 2"]),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  it("refuses connection flags it would only ignore", async () => {
+    for (const flag of [
+      "--server",
+      "--database",
+      "--user",
+      "--password",
+      "--connection",
+      "--connection-string",
+    ]) {
+      await expect(planCommand(["SELECT 1", flag, "x"])).rejects.toMatchObject({
+        code: "UNKNOWN_FLAG",
+      });
+    }
   });
 });
 
@@ -161,6 +220,13 @@ describe("execute command", () => {
     useFakeDb();
     await expect(
       executeCommand([...CONNECTION_ARGS, SQL, "--confirm", "UPDATE dbo.Users SET email = 'y'"]),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  it("rejects a second positional", async () => {
+    useFakeDb();
+    await expect(
+      executeCommand([...CONNECTION_ARGS, SQL, "extra", "--confirm", SQL]),
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
 
@@ -262,6 +328,13 @@ describe("doctor command", () => {
     useFakeDb({ openError: new Error("server not found") });
     await expect(doctorCommand(CONNECTION_ARGS)).rejects.toMatchObject({
       code: "CONNECTION_FAILED",
+    });
+  });
+
+  it("rejects positional arguments", async () => {
+    useFakeDb();
+    await expect(doctorCommand([...CONNECTION_ARGS, "extra"])).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
     });
   });
 });

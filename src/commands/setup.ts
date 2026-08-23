@@ -1,9 +1,31 @@
 import { AxiError, installSessionStartHooks } from "axi-sdk-js";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseArgs } from "../lib/args.js";
+import { assertMaxPositionals, parseArgs } from "../lib/args.js";
 
-const KNOWN_FLAGS = ["output", "marker", "name"];
+// Each subcommand accepts only the flags that actually change its behaviour.
+const SUBCOMMAND_FLAGS: Record<string, readonly string[]> = {
+  role: ["output"],
+  hooks: ["marker"],
+  config: ["output"],
+};
+
+function assertSubcommandFlags(
+  parsed: ReturnType<typeof parseArgs>,
+  sub: string,
+): void {
+  const known = SUBCOMMAND_FLAGS[sub] ?? [];
+  for (const key of Object.keys(parsed.flags)) {
+    if (!known.includes(key)) {
+      throw new AxiError(`unknown flag --${key} for setup ${sub}`, "UNKNOWN_FLAG", [
+        known.length > 0
+          ? `Known flags for setup ${sub}: ${known.join(", ")}`
+          : `setup ${sub} takes no flags`,
+      ]);
+    }
+  }
+  assertMaxPositionals(parsed, 0, `setup ${sub}`, `setup ${sub} takes no positional arguments`);
+}
 
 const ROLE_TSQL = `-- ============================================================================
 -- mssql-axi: agent_reader role (one-time setup, run as sysadmin)
@@ -65,8 +87,8 @@ GO
 const CONFIG_EXAMPLE = {
   default: "dev",
   connections: {
-    dev: "Driver={ODBC Driver 17 for SQL Server};Server=localhost;Database=app;Trusted_Connection=Yes;Trust Server Certificate=Yes;",
-    azure: "Driver={ODBC Driver 18 for SQL Server};Server=tcp:myapp.database.windows.net,1433;Initial Catalog=app;Authentication=ActiveDirectoryInteractive;Encrypt=Yes;",
+    dev: "Driver={ODBC Driver 17 for SQL Server};Server=localhost;Database=app;Trusted_Connection=Yes;TrustServerCertificate=Yes;",
+    azure: "Driver={ODBC Driver 18 for SQL Server};Server=tcp:myapp.database.windows.net,1433;Database=app;Authentication=ActiveDirectoryInteractive;Encrypt=Yes;",
   },
 };
 
@@ -95,13 +117,7 @@ export async function setupCommand(
 
 function runSetupRole(args: readonly string[]): string | Record<string, unknown> {
   const parsed = parseArgs(args);
-  for (const key of Object.keys(parsed.flags)) {
-    if (!KNOWN_FLAGS.includes(key)) {
-      throw new AxiError(`unknown flag --${key}`, "UNKNOWN_FLAG", [
-        `Known flags: ${KNOWN_FLAGS.join(", ")}`,
-      ]);
-    }
-  }
+  assertSubcommandFlags(parsed, "role");
   const output = typeof parsed.flags.output === "string" ? parsed.flags.output : undefined;
   if (output) {
     writeFileSync(output, ROLE_TSQL, "utf8");
@@ -125,13 +141,7 @@ function runSetupRole(args: readonly string[]): string | Record<string, unknown>
 
 function runSetupHooks(args: readonly string[]): Record<string, unknown> {
   const parsed = parseArgs(args);
-  for (const key of Object.keys(parsed.flags)) {
-    if (!KNOWN_FLAGS.includes(key)) {
-      throw new AxiError(`unknown flag --${key}`, "UNKNOWN_FLAG", [
-        `Known flags: ${KNOWN_FLAGS.join(", ")}`,
-      ]);
-    }
-  }
+  assertSubcommandFlags(parsed, "hooks");
   const marker = typeof parsed.flags.marker === "string" ? parsed.flags.marker : "mssql-axi";
   installSessionStartHooks({ marker, binaryNames: [marker] });
   return {
@@ -148,13 +158,7 @@ function runSetupHooks(args: readonly string[]): Record<string, unknown> {
 
 function runSetupConfig(args: readonly string[]): Record<string, unknown> {
   const parsed = parseArgs(args);
-  for (const key of Object.keys(parsed.flags)) {
-    if (!KNOWN_FLAGS.includes(key)) {
-      throw new AxiError(`unknown flag --${key}`, "UNKNOWN_FLAG", [
-        `Known flags: ${KNOWN_FLAGS.join(", ")}`,
-      ]);
-    }
-  }
+  assertSubcommandFlags(parsed, "config");
   const output =
     typeof parsed.flags.output === "string"
       ? parsed.flags.output

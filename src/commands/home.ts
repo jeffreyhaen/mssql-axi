@@ -1,8 +1,9 @@
 import { AxiError } from "axi-sdk-js";
-import { parseArgs } from "../lib/args.js";
+import { assertMaxPositionals, parseArgs } from "../lib/args.js";
 import { resolveConnection } from "../lib/config.js";
 import { withDatabase } from "../lib/connect.js";
 import { redactSecrets } from "../lib/redact.js";
+import { errorMessage } from "../lib/errors.js";
 
 const KNOWN_FLAGS = [
   "connection-string",
@@ -20,6 +21,7 @@ export async function homeCommand(args: readonly string[]): Promise<Record<strin
       ]);
     }
   }
+  assertMaxPositionals(parsed, 0, "home", "home takes no arguments: `mssql-axi`");
 
   const resolved = resolveConnection({
     connectionString:
@@ -42,7 +44,7 @@ export async function homeCommand(args: readonly string[]): Promise<Record<strin
     );
   } catch (err) {
     if (err instanceof AxiError) throw err;
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     throw new AxiError(
       `connection failed: ${redactSecrets(message, [resolved.connectionString])}`,
       "CONNECTION_FAILED",

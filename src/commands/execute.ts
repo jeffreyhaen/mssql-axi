@@ -1,8 +1,9 @@
 import { AxiError } from "axi-sdk-js";
-import { parseArgs, sqlArgument } from "../lib/args.js";
+import { assertMaxPositionals, parseArgs, sqlArgument } from "../lib/args.js";
 import { resolveConnection } from "../lib/config.js";
 import { withDatabase } from "../lib/connect.js";
 import { redactSecrets } from "../lib/redact.js";
+import { errorMessage } from "../lib/errors.js";
 import { isDestructive, normaliseSql } from "../lib/normalize.js";
 
 const KNOWN_FLAGS = [
@@ -32,6 +33,12 @@ export async function executeCommand(args: readonly string[]): Promise<Record<st
   }
 
   const sqlText = sqlArgument(parsed);
+  assertMaxPositionals(
+    parsed,
+    1,
+    "execute",
+    "Pass exactly one statement: `mssql-axi execute \"UPDATE ...\" --confirm \"UPDATE ...\"`",
+  );
   if (!sqlText) {
     throw new AxiError("a SQL statement is required for execute", "VALIDATION_ERROR", [
       "Pass it positionally: `mssql-axi execute \"UPDATE ...\" --confirm \"UPDATE ...\"`",
@@ -143,7 +150,7 @@ export async function executeCommand(args: readonly string[]): Promise<Record<st
     });
   } catch (err) {
     if (err instanceof AxiError) throw err;
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     throw new AxiError(
       `execute failed: ${redactSecrets(message, [resolved.connectionString])}`,
       "CONNECTION_FAILED",

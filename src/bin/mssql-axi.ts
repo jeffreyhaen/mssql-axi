@@ -4,16 +4,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { encode } from "@toon-format/toon";
 import { AxiError, runAxiCli } from "axi-sdk-js";
-import { doctorCommand } from "../commands/doctor.js";
-import { executeCommand } from "../commands/execute.js";
-import { explainCommand } from "../commands/explain.js";
-import { homeCommand } from "../commands/home.js";
-import { inspectCommand } from "../commands/inspect.js";
-import { listCommand } from "../commands/list.js";
-import { planCommand } from "../commands/plan.js";
-import { queryCommand } from "../commands/query.js";
-import { sampleCommand } from "../commands/sample.js";
-import { setupCommand } from "../commands/setup.js";
 import { COMMAND_HELP, TOP_LEVEL_HELP } from "../help.js";
 
 const USAGE_CODES = new Set([
@@ -55,22 +45,65 @@ function formatError(error: unknown): { output: string; exitCode: number } {
 
 const version = readVersion();
 
+// Command modules are lazy-loaded so the fast paths (--version, --help) never
+// pull in the ODBC driver or database code.
+async function doctorHandler(args: string[]) {
+  return (await import("../commands/doctor.js")).doctorCommand(args);
+}
+
+async function listHandler(args: string[]) {
+  return (await import("../commands/list.js")).listCommand(args);
+}
+
+async function inspectHandler(args: string[]) {
+  return (await import("../commands/inspect.js")).inspectCommand(args);
+}
+
+async function sampleHandler(args: string[]) {
+  return (await import("../commands/sample.js")).sampleCommand(args);
+}
+
+async function queryHandler(args: string[]) {
+  return (await import("../commands/query.js")).queryCommand(args);
+}
+
+async function explainHandler(args: string[]) {
+  return (await import("../commands/explain.js")).explainCommand(args);
+}
+
+async function planHandler(args: string[]) {
+  return (await import("../commands/plan.js")).planCommand(args);
+}
+
+async function executeHandler(args: string[]) {
+  return (await import("../commands/execute.js")).executeCommand(args);
+}
+
+async function setupHandler(args: string[]) {
+  return (await import("../commands/setup.js")).setupCommand(args);
+}
+
+async function homeHandler(args: string[]) {
+  return (await import("../commands/home.js")).homeCommand(args);
+}
+
 await runAxiCli({
   description: "Inspect and query Microsoft SQL Server and Azure SQL databases",
   version,
   topLevelHelp: TOP_LEVEL_HELP,
   getCommandHelp: (command) => COMMAND_HELP[command] ?? null,
   formatError,
-  home: (args) => homeCommand(args),
+  home: homeHandler,
   commands: {
-    doctor: (args) => doctorCommand(args),
-    list: (args) => listCommand(args),
-    inspect: (args) => inspectCommand(args),
-    sample: (args) => sampleCommand(args),
-    query: (args) => queryCommand(args),
-    explain: (args) => explainCommand(args),
-    plan: (args) => planCommand(args),
-    execute: (args) => executeCommand(args),
-    setup: (args) => setupCommand(args),
+    home: homeHandler,
+    doctor: doctorHandler,
+    list: listHandler,
+    inspect: inspectHandler,
+    sample: sampleHandler,
+    query: queryHandler,
+    explain: explainHandler,
+    plan: planHandler,
+    execute: executeHandler,
+    setup: setupHandler,
   },
 });

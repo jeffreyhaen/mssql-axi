@@ -22,7 +22,7 @@ export async function openDatabase(options: OpenDatabaseOptions): Promise<Databa
       "VALIDATION_ERROR",
       [
         "Local SQL Server with Windows Auth:  Driver={ODBC Driver 17 for SQL Server};Server=localhost\\SQLEXPRESS;Database=app;Trusted_Connection=Yes;",
-        "Azure SQL with AAD:                     Driver={ODBC Driver 18 for SQL Server};Server=tcp:host.database.windows.net,1433;Initial Catalog=app;Authentication=ActiveDirectoryInteractive;Encrypt=Yes;",
+        "Azure SQL with AAD:                     Driver={ODBC Driver 18 for SQL Server};Server=tcp:host.database.windows.net,1433;Database=app;Authentication=ActiveDirectoryInteractive;Encrypt=Yes;",
         "Or run `mssql-axi setup config` to generate an example",
       ],
     );
