@@ -4,6 +4,11 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![node](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](package.json)
 
+<p align="center">
+  <img src="assets/readme-header.png" alt="mssql-axi header">
+</p>
+
+
 Agent-ergonomic CLI for **Microsoft SQL Server** and **Azure SQL** — schema discovery,
 row previews, read-only queries, showplans, and gated mutations, in token-efficient
 [TOON](https://toonformat.dev/) output.
