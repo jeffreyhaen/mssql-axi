@@ -5,6 +5,8 @@ All notable changes to mssql-axi are documented here. This project follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-23
+
 ### Added
 
 - Positional arguments: `query "SELECT ..."`, `explain "SELECT ..."`, `plan "..."`, and
@@ -104,4 +106,5 @@ Initial release.
 - `execute` always reports `rowsAffected: [0]` because the ODBC driver's `query` does not surface a row count. Use `query` to verify, or run `SELECT @@ROWCOUNT` after the mutation.
 - No integration tests against a real SQL Server in CI; validation has been done manually against a local SQL Server instance and an Azure SQL database.
 
+[0.2.0]: https://github.com/jeffreyhaen/mssql-axi/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jeffreyhaen/mssql-axi/releases/tag/v0.1.0

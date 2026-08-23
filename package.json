@@ -1,6 +1,6 @@
 {
   "name": "mssql-axi",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Agent-ergonomic CLI for Microsoft SQL Server and Azure SQL — read-by-default, token-efficient TOON output, an AXI (Agent eXperience Interface) backed by the native Microsoft ODBC driver.",
   "keywords": [
     "mssql",
