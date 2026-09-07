@@ -1,6 +1,7 @@
 # mssql-axi (SQL Server axi)
 
 [![ci](https://github.com/jeffreyhaen/mssql-axi/actions/workflows/ci.yml/badge.svg)](https://github.com/jeffreyhaen/mssql-axi/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/%40jeffreyhaen%2Fmssql-axi.svg)](https://www.npmjs.com/package/@jeffreyhaen/mssql-axi)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![node](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](package.json)
 
@@ -29,20 +30,18 @@ enforcement.
 
 ## Install
 
-No npm publish — run it straight from GitHub:
+Install globally (recommended for repeated use):
 
 ```sh
-npx -y github:jeffreyhaen/mssql-axi --help
-```
-
-Or install globally:
-
-```sh
-npm install -g github:jeffreyhaen/mssql-axi
+npm install -g @jeffreyhaen/mssql-axi
 mssql-axi --help
 ```
 
-The `prepare` script builds `dist/` on install, so no build step is needed.
+For a one-off invocation without installing:
+
+```sh
+npx -y @jeffreyhaen/mssql-axi --help
+```
 
 **Prerequisite:** the Microsoft ODBC Driver 17 or 18 for SQL Server on the host
 (Windows: the MSI from Microsoft; Linux/macOS: `unixodbc` + the Microsoft driver).

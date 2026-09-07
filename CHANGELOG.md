@@ -5,6 +5,10 @@ All notable changes to mssql-axi are documented here. This project follows
 
 ## [Unreleased]
 
+### Changed
+
+- Publish the CLI as `@jeffreyhaen/mssql-axi` with a GitHub Actions npm release workflow
+
 ## [0.2.0] - 2026-08-23
 
 ### Added
