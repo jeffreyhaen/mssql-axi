@@ -63,6 +63,18 @@ spelling, rejected .NET keywords, named instances): see
 [`docs/connection-strings.md`](docs/connection-strings.md). mssql-axi rejects known-bad
 strings up front and appends the driver's own diagnostic to connection errors.
 
+### Agent rule: `ActiveDirectoryDefault` rejection
+
+If ODBC reports `Invalid value specified for connection string attribute 'Authentication'` for
+`Authentication=ActiveDirectoryDefault`, it rejected the mode locally before contacting SQL
+Server. Do not retry unchanged or investigate the server/firewall/production.
+
+Ask which identity flow is intended, then use explicit `ActiveDirectoryInteractive`,
+`ActiveDirectoryIntegrated`, `ActiveDirectoryServicePrincipal`, or
+`ActiveDirectoryManagedIdentity`; do not silently rewrite the mode. If the default credential
+chain is required, use a tested ODBC Driver 18 build that accepts it and rerun `doctor` against
+development/staging. See [`docs/connection-strings.md`](docs/connection-strings.md).
+
 ## Read commands
 
 | Command | Purpose | Example |

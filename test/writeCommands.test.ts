@@ -331,6 +331,21 @@ describe("doctor command", () => {
     });
   });
 
+  it("explains an ActiveDirectoryDefault rejection as a local driver compatibility issue", async () => {
+    const connectionString =
+      "Driver={ODBC Driver 18 for SQL Server};Server=tcp:host.database.windows.net,1433;Database=app;Authentication=ActiveDirectoryDefault;Encrypt=Yes;";
+    useFakeDb({
+      openError: new Error(
+        "[Microsoft][ODBC Driver 18 for SQL Server]Invalid value specified for connection string attribute 'Authentication'",
+      ),
+    });
+
+    await expect(doctorCommand(["--connection-string", connectionString])).rejects.toMatchObject({
+      code: "CONNECTION_FAILED",
+      suggestions: expect.arrayContaining(["ODBC rejected `Authentication=ActiveDirectoryDefault` locally, before contacting SQL Server; do not retry unchanged or investigate the server/network"]),
+    });
+  });
+
   it("rejects positional arguments", async () => {
     useFakeDb();
     await expect(doctorCommand([...CONNECTION_ARGS, "extra"])).rejects.toMatchObject({

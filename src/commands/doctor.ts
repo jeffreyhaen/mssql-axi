@@ -89,15 +89,26 @@ export async function doctorCommand(args: readonly string[]): Promise<Record<str
   } catch (err) {
     if (err instanceof AxiError) throw err;
     const message = errorMessage(err);
+    const activeDirectoryDefaultRejected =
+      /(?:^|;)\s*Authentication\s*=\s*Active\s*Directory\s*Default\s*(?:;|$)/i.test(
+        resolved.connectionString,
+      ) && /Invalid value specified for connection string attribute\s+['"]?Authentication['"]?/i.test(message);
+    const help = activeDirectoryDefaultRejected
+      ? [
+          "ODBC rejected `Authentication=ActiveDirectoryDefault` locally, before contacting SQL Server; do not retry unchanged or investigate the server/network",
+          "Ask which identity flow is intended, then use explicit `ActiveDirectoryInteractive`, `ActiveDirectoryIntegrated`, `ActiveDirectoryServicePrincipal`, or `ActiveDirectoryManagedIdentity`; do not silently rewrite it",
+          "If the default credential chain is required, use a tested ODBC Driver 18 build that accepts it and rerun `mssql-axi doctor` against development/staging",
+        ]
+      : [
+          "Check your --connection-string for correctness",
+          "Verify the ODBC driver is installed (ODBC Driver 17 or 18 for SQL Server)",
+          "Driver 18 defaults to Encrypt=Mandatory; for a local/named instance with a self-signed cert use `TrustServerCertificate=Yes` (no spaces) or `Encrypt=No`, or use `{ODBC Driver 17 for SQL Server}`",
+          "Run `mssql-axi setup config` to generate a known-good example",
+        ];
     throw new AxiError(
       `connection failed: ${redactSecrets(message, [resolved.connectionString])}`,
       "CONNECTION_FAILED",
-      [
-        "Check your --connection-string for correctness",
-        "Verify the ODBC driver is installed (ODBC Driver 17 or 18 for SQL Server)",
-        "Driver 18 defaults to Encrypt=Mandatory; for a local/named instance with a self-signed cert use `TrustServerCertificate=Yes` (no spaces) or `Encrypt=No`, or use `{ODBC Driver 17 for SQL Server}`",
-        "Run `mssql-axi setup config` to generate a known-good example",
-      ],
+      help,
     );
   }
 }
