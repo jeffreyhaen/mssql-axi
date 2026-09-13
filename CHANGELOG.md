@@ -5,6 +5,12 @@ All notable changes to mssql-axi are documented here. This project follows
 
 ## [Unreleased]
 
+### Documentation & Infrastructure
+
+- Run the workflows on `actions/checkout@v6`, `actions/setup-node@v6` and
+  `pnpm/action-setup@v6`; the older actions targeted Node 20, which GitHub runs on
+  Node 24 with a deprecation warning.
+
 ## [0.2.1] - 2026-09-11
 
 ### Changed
