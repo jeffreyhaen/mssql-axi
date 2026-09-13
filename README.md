@@ -168,7 +168,7 @@ Tests run the command layer against an injected fake ODBC driver (`test/fakeDb.t
 no live SQL Server is needed. CI runs build, typecheck, tests, and a CLI smoke test on
 Node 20 and 22 (Linux) and Node 20 (Windows).
 
-## Releasing
+### Releasing
 
 1. Move the `Unreleased` section in `CHANGELOG.md` under `## [x.y.z] - <date>`.
 2. Bump `version` in `package.json`.
