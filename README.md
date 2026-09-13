@@ -20,13 +20,22 @@ server through the native Microsoft ODBC driver, passes connection strings throu
 verbatim, is read-by-default, and answers with minimal schemas plus contextual next-step
 hints.
 
-## Why not an MCP server
+## Why AXI: Comparing Interfaces for Agents
 
-A database MCP server loads its full tool schema into the agent's context on every
-request for the rest of the session (~185k input tokens per task in our measurements).
-A skill-based AXI costs ~55 tokens until the agent actually uses it. Raw `sqlcmd` is
-cheaper still, but is free-form, returns wide ASCII tables, and offers no read-only
-enforcement.
+AI agents interact with databases through three main paradigms: raw human-oriented CLIs, MCP servers, or agent-first CLIs ([AXI](https://axi.md/)). Across extensive [AXI benchmark studies](https://axi.md/) (over 900 evaluation runs), principled agent CLIs consistently achieve higher task success at a fraction of the token cost:
+
+| Interface | Context Overhead (Turn 0) | Output Format | Measured Payload (Benchmark) | Mutation Safety | Workflow Guidance |
+|---|---|---|---|---|---|
+| **`mssql-axi` (Skill + CLI)** | **~55 tokens** (on-demand) | **TOON** (compact tables) | **-34.8% vs ASCII, -53.3% vs JSON** (weighted average across queries & schema introspection) | ✅ **Read-only by default**; double-gated dry-run mutations | Structured `{ error, code, help[] }` suggestions |
+| **Raw CLI** (`sqlcmd`) | ~0 tokens | Wide ASCII padded tables | Baseline (fixed-width whitespace padding & uncapped dumps) | ❌ Direct execution, no read-only guarantee | Human error messages & generic exit codes |
+| **Database MCP Server** | **~5,000–10,000 tokens** (15–30 eager tool schemas) | JSON-RPC | Highest cost (~185k input tokens per task across multi-turn runs) | Varies; often unconstrained query execution | Tool schema validation errors |
+
+### Why this matters
+
+- **Zero context bloat**: Database MCP servers inject expansive tool definitions into context on every turn (~20k–35k tokens upfront, accumulating to ~185k tokens over multi-turn tasks). A skill-based AXI costs just ~55 tokens until actually invoked.
+- **No runaway tabular dumps**: Raw `sqlcmd` prints fixed-width ASCII tables padded with whitespace, blowing up token budgets on multi-column schemas, and lacks automatic output capping. `mssql-axi` returns dense, delimiter-optimized [TOON](https://toonformat.dev/) with default row caps (e.g., `TOP 50`) and truncation hints.
+- **Safety by design**: Read-only queries run under read uncommitted snapshots without table locks. Mutating queries are double-gated: they default to dry-run validation inside rolled-back transactions, requiring `--execute` (and `--confirm <name>` for DDL/destructive operations).
+- **Targeted schema discovery**: Rather than dumping entire catalogs, `mssql-axi` exposes focused inspection (`schema list`, `table inspect`, `table sample`) with next-step hints guiding the agent directly to relevant foreign keys and indexes. In AXI benchmarks, AXI CLIs reduce turns by ~50% and overall task cost by up to 66% compared to MCP.
 
 ## Install
 
@@ -165,6 +174,9 @@ pnpm run dev -- list tables --connection-string '...'
 Tests run the command layer against an injected fake ODBC driver (`test/fakeDb.ts`), so
 no live SQL Server is needed. CI runs build, typecheck, tests, and a CLI smoke test on
 Node 20 and 22 (Linux) and Node 20 (Windows).
+
+- [AXI — agent eXperience interface](https://axi.md/) · [kunchenguid/axi](https://github.com/kunchenguid/axi)
+- [TOON — token-optimized object notation](https://toonformat.dev/) · [toonformat/toon](https://github.com/toonformat/toon)
 
 ## License
 
