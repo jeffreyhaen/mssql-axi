@@ -168,9 +168,6 @@ Tests run the command layer against an injected fake ODBC driver (`test/fakeDb.t
 no live SQL Server is needed. CI runs build, typecheck, tests, and a CLI smoke test on
 Node 20 and 22 (Linux) and Node 20 (Windows).
 
-- [AXI — agent eXperience interface](https://axi.md/) · [kunchenguid/axi](https://github.com/kunchenguid/axi)
-- [TOON — token-optimized object notation](https://toonformat.dev/) · [toonformat/toon](https://github.com/toonformat/toon)
-
 ## Releasing
 
 1. Move the `Unreleased` section in `CHANGELOG.md` under `## [x.y.z] - <date>`.
@@ -192,3 +189,9 @@ workflow can be re-run safely.
 MIT © Jeffrey Haen
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
+## See also
+
+- [docs/connection-strings.md](docs/connection-strings.md) — the ODBC 17 vs 18 keyword differences, one line per supported auth flow
+- [AXI — agent eXperience interface](https://axi.md/) · [kunchenguid/axi](https://github.com/kunchenguid/axi)
+- [TOON — token-optimized object notation](https://toonformat.dev/) · [toonformat/toon](https://github.com/toonformat/toon)
